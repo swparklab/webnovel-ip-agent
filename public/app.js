@@ -99,6 +99,11 @@ const state = {
   studio: "production",  // 'production' | 'platform'
   activeTab: "foresight",
   platformMeta: null,
+  chapters: {},          // chapterNumber -> markdown (연속 원고)
+  chapterRunning: false,
+  chapterController: null,
+  streamingChapter: null,
+  batchSize: 1,          // 한번에 생성할 화 수 (1 또는 5)
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
   errors: {},
@@ -444,6 +449,12 @@ function renderActiveTab() {
     return;
   }
 
+  // 원고 탭은 연속 회차 스튜디오로 렌더한다.
+  if (id === "draft") {
+    renderDraftStudio(panel);
+    return;
+  }
+
   const st = state.statuses[id] || "idle";
   const buffer = state.buffers[id] || "";
   const isDraft = id === "draft";
@@ -474,6 +485,7 @@ function resetRun() {
   state.buffers = {};
   state.statuses = {};
   state.errors = {};
+  state.chapters = {};   // 새 파이프라인 실행 시 연속 원고도 초기화(1화가 새로 생성됨)
   state.usage = { input_tokens: 0, output_tokens: 0 };
   AGENTS.forEach((a) => { state.statuses[a.id] = "idle"; updateAgentCard(a.id); });
   updateUsage();
@@ -590,6 +602,215 @@ function stopAgent() {
   if (state.controller) state.controller.abort();
 }
 
+/* --------------------------- 연속 원고 스튜디오 -------------------------- */
+
+const MAX_CHAPTER = 10;
+
+// 1화는 파이프라인 Draft 산출물이 기본 소스. 생성된 회차(state.chapters)가 있으면 덮어쓴다.
+function chapterMap() {
+  const m = {};
+  if (state.buffers.draft) m[1] = state.buffers.draft;
+  Object.entries(state.chapters).forEach(([k, v]) => { if (v) m[k] = v; });
+  return m;
+}
+
+function chapterNumbers(map = chapterMap()) {
+  return Object.keys(map).map(Number).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b);
+}
+
+function draftStudioHtml() {
+  const map = chapterMap();
+  const nums = chapterNumbers(map);
+  const maxCh = nums.length ? Math.max(...nums) : 0;
+  const next = maxCh + 1;
+  const canMore = maxCh < MAX_CHAPTER;
+  const willGen = Math.min(state.batchSize, MAX_CHAPTER - maxCh);
+
+  const action = state.chapterRunning
+    ? `<button class="command ghost" id="chapterStop" type="button">중단</button>`
+    : canMore
+      ? `<button class="command primary chapter-gen" id="chapterGen" type="button"><span class="dot"></span><span>다음 ${willGen}화 생성 (${next}~${maxCh + willGen}화)</span></button>`
+      : `<span class="chapter-complete">10화까지 완성 ✓</span>`;
+
+  const controls = `
+    <div class="chapter-bar">
+      <span class="chapter-count">원고 <strong>${maxCh}</strong> / ${MAX_CHAPTER}화</span>
+      <label class="chapter-batch">한번에
+        <select id="chapterBatch" ${state.chapterRunning ? "disabled" : ""}>
+          <option value="1"${state.batchSize === 1 ? " selected" : ""}>1화씩</option>
+          <option value="5"${state.batchSize === 5 ? " selected" : ""}>5화씩</option>
+        </select>
+      </label>
+      ${action}
+      ${maxCh > 1 && !state.chapterRunning ? `<button class="mini danger" id="chapterReset" type="button" title="2화 이후 생성 원고 삭제">원고 초기화</button>` : ""}
+    </div>`;
+
+  let body;
+  if (!nums.length) {
+    body = `<div class="empty-state">위에서 <strong>SF Agent 실행</strong>으로 1화 오프닝을 먼저 만들거나, <strong>다음 1화 생성</strong>으로 1화부터 시작하세요. 좋으면 다음 화를 이어서 생성합니다.</div>`;
+  } else {
+    body = nums.map((n) => {
+      const streaming = state.chapterRunning && state.streamingChapter === n;
+      const cursor = streaming ? '<span class="cursor"></span>' : "";
+      const tag = streaming ? `<span class="chapter-tag">생성 중…</span>` : "";
+      return `<article class="chapter-block">${tag}<div class="md-output manuscript">${window.renderMarkdown(map[n])}${cursor}</div></article>`;
+    }).join('<hr class="chapter-sep" />');
+  }
+  return `<div class="chapter-studio">${controls}<div id="chapterList">${body}</div></div>`;
+}
+
+function renderDraftStudio(panel) {
+  panel.innerHTML = draftStudioHtml();
+  const batch = el("chapterBatch");
+  if (batch) batch.addEventListener("change", () => {
+    state.batchSize = Number(batch.value) || 1;
+    localStorage.setItem("sfChapterBatch", String(state.batchSize));
+    renderDraftStudio(panel);
+  });
+  const gen = el("chapterGen");
+  if (gen) gen.addEventListener("click", generateChapters);
+  const stop = el("chapterStop");
+  if (stop) stop.addEventListener("click", () => { if (state.chapterController) state.chapterController.abort(); });
+  const reset = el("chapterReset");
+  if (reset) reset.addEventListener("click", resetChapters);
+}
+
+function resetChapters() {
+  if (state.chapterRunning) return;
+  if (!confirm("2화 이후 생성한 원고를 삭제할까요? (1화 오프닝은 유지됩니다)")) return;
+  state.chapters = {};
+  toast("연속 원고를 초기화했습니다.", "info");
+  if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+}
+
+async function generateChapters() {
+  if (state.chapterRunning || state.running) return;
+  const map = chapterMap();
+  const nums = chapterNumbers(map);
+  const maxCh = nums.length ? Math.max(...nums) : 0;
+  const from = maxCh + 1;
+  if (from > MAX_CHAPTER) { toast("이미 10화까지 생성했습니다.", "warn"); return; }
+  const count = Math.min(state.batchSize, MAX_CHAPTER - maxCh);
+  const prevText = maxCh >= 1 ? map[maxCh] : "";
+  const input = collectInput();
+  const model = el("modelSelect").value || state.config.defaultModel;
+
+  state.chapterRunning = true;
+  state.streamingChapter = from;
+  el("runStatus").textContent = `원고 생성 중 (${from}~${from + count - 1}화)`;
+  const controller = new AbortController();
+  state.chapterController = controller;
+  renderDraftStudio(el("outputPanel"));
+
+  try {
+    const res = await fetch("/api/chapter", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input, model, fromChapter: from, count, prevText,
+        ctx: { foresight: state.buffers.foresight, world: state.buffers.world, plot: state.buffers.plot },
+      }),
+      signal: controller.signal,
+    });
+    if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf("\n\n")) !== -1) {
+        const raw = buf.slice(0, sep);
+        buf = buf.slice(sep + 2);
+        let type = "message"; let dataLine = "";
+        raw.split("\n").forEach((line) => {
+          if (line.startsWith("event:")) type = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+        });
+        if (!dataLine) continue;
+        let d; try { d = JSON.parse(dataLine); } catch { continue; }
+        if (type === "chapter-start") {
+          state.streamingChapter = d.n;
+          state.chapters[d.n] = "";
+        } else if (type === "chapter-delta") {
+          state.chapters[d.n] = (state.chapters[d.n] || "") + d.text;
+          if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+        } else if (type === "error") {
+          toast(d.message || "원고 생성 오류", "error");
+        }
+      }
+    }
+    el("runStatus").textContent = "원고 완료";
+    toast("원고를 생성했습니다.", "success");
+  } catch (err) {
+    if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("원고 생성을 중단했습니다.", "warn"); }
+    else { el("runStatus").textContent = "오류"; toast(err.message || "원고 생성 실패", "error"); }
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    state.streamingChapter = null;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+/* --------------------------- 기획 아키텍트 ------------------------------ */
+
+// 아이디어 한 줄 → LLM이 Core IP 폼 전체를 자동 기획해 채운다.
+async function ideateFill() {
+  const idea = el("ideaInput").value.trim();
+  if (!idea) { toast("아이디어를 한 줄 입력하세요.", "warn"); el("ideaInput").focus(); return; }
+  if (state.running) return;
+
+  const btn = el("ideateBtn");
+  const label = btn.querySelector("span:last-child");
+  const prev = label.textContent;
+  btn.disabled = true;
+  label.textContent = "기획 생성 중…";
+  el("runStatus").textContent = "기획 생성 중";
+
+  try {
+    const res = await fetch("/api/ideate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idea, genre: el("genre").value, model: el("modelSelect").value }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "기획 생성 실패");
+    const f = data.fields || {};
+
+    // 모델이 더 적합한 장르를 골랐으면 먼저 반영한다.
+    if (f.genre && el("genre").querySelector(`option[value="${f.genre}"]`)) {
+      el("genre").value = f.genre;
+    }
+    // 반환된 필드를 폼에 채운다(텍스트 필드만).
+    Object.entries(f).forEach(([k, v]) => {
+      if (k === "genre") return;
+      const node = el(k);
+      if (node && typeof v === "string" && node.type !== "checkbox") node.value = v;
+    });
+    // 바뀐 장르에 맞춰 라벨만 갱신(프리셋으로 덮어쓰지 않음).
+    await onGenreChange(false);
+    if (el("ipTitle").value) el("workspaceTitle").textContent = el("ipTitle").value;
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+
+    el("runStatus").textContent = data.fallback ? "기획 채움(폴백)" : "기획 채움";
+    toast(
+      data.fallback
+        ? "기획을 채웠습니다(로컬 폴백). 키/구독 연결 시 더 정교해집니다."
+        : "아이디어로 Core IP 기획을 채웠습니다. 검토 후 ‘실행’을 누르세요.",
+      "success",
+    );
+  } catch (err) {
+    el("runStatus").textContent = "오류";
+    toast(err.message || "기획 생성 실패", "error");
+  } finally {
+    btn.disabled = false;
+    label.textContent = prev;
+  }
+}
+
 /* ------------------------------ Projects -------------------------------- */
 
 function currentReport() {
@@ -599,7 +820,10 @@ function currentReport() {
       agents[a.id] = { id: a.id, name: a.name, tabs: [a.id], text: state.buffers[a.id] };
     }
   });
-  return { generatedAt: new Date().toISOString(), model: state.lastModel, agents, usage: state.usage };
+  // 생성한 연속 원고(2화 이후)도 함께 저장/내보내기.
+  const chapters = {};
+  Object.entries(state.chapters).forEach(([k, v]) => { if (v) chapters[k] = v; });
+  return { generatedAt: new Date().toISOString(), model: state.lastModel, agents, usage: state.usage, chapters };
 }
 
 async function loadProjects(selectId) {
@@ -665,6 +889,7 @@ async function openProject(id) {
       });
       state.lastModel = p.report.model || "";
       if (p.report.usage) { state.usage = p.report.usage; updateUsage(); }
+      if (p.report.chapters) state.chapters = { ...p.report.chapters };
     }
     state.score = p.score ?? 0;
     el("readinessChip").textContent = `제작도 ${state.score}%`;
@@ -777,6 +1002,8 @@ async function loadConfig() {
 /* -------------------------------- Boot ---------------------------------- */
 
 function boot() {
+  const savedBatch = Number(localStorage.getItem("sfChapterBatch"));
+  if (savedBatch === 1 || savedBatch === 5) state.batchSize = savedBatch;
   renderAgentGrid();
   renderTabs();
 
@@ -789,6 +1016,7 @@ function boot() {
 
   el("runAgent").addEventListener("click", runAgent);
   el("stopAgent").addEventListener("click", stopAgent);
+  el("ideateBtn").addEventListener("click", ideateFill);
   // '예시' 버튼: 현재 선택된 장르의 기본 예시 프리셋을 불러온다.
   el("loadExample").addEventListener("click", () => onGenreChange(true));
   el("exportMarkdown").addEventListener("click", exportMarkdown);

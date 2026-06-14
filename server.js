@@ -6,6 +6,9 @@ const path = require("path");
 
 const { config, resolveMode, publicConfig } = require("./lib/config");
 const { runPipeline, pipelineAgents } = require("./lib/orchestrator");
+const { streamMessage } = require("./lib/llm");
+const { buildIdeatePrompt, extractFields, localIdeate } = require("./lib/ideate");
+const { buildChapterPrompt, localChapter, MAX_CHAPTER } = require("./lib/chapters");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
@@ -93,6 +96,19 @@ function reportToMarkdown(record) {
     if (!agent) return;
     lines.push(`---`, "", `# ${agent.name}`, "", agent.text || agent.error || "", "");
   });
+
+  // 연속 회차 원고(2화 이후 등)가 있으면 이어서 붙인다.
+  const chapters = record.report?.chapters || record.chapters;
+  if (chapters && typeof chapters === "object") {
+    const nums = Object.keys(chapters).map(Number).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b);
+    if (nums.length) {
+      lines.push(`---`, "", `# 연속 원고 (회차별)`, "");
+      nums.forEach((n) => {
+        const text = chapters[n];
+        if (text && String(text).trim()) lines.push(String(text), "");
+      });
+    }
+  }
   return lines.join("\n");
 }
 
@@ -168,6 +184,106 @@ async function handleRun(req, res) {
   }
 }
 
+// 기획 아키텍트: 아이디어 한 줄 → Core IP 폼 필드(JSON). SSE 아님(단발 응답).
+async function handleIdeate(req, res) {
+  const payload = await readJson(req);
+  const idea = String(payload.idea || "").trim();
+  const genre = payload.genre || "aiForesight";
+  const model = payload.model || config.defaultModel;
+  if (!idea) return sendJson(res, 400, { ok: false, error: "아이디어를 입력하세요." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, fallback: true, fields: localIdeate(idea, genre) });
+  }
+  try {
+    const { system, user } = buildIdeatePrompt(idea, genre);
+    const { text } = await streamMessage({
+      provider: mode, // 'api' | 'cli'
+      model,
+      system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.7,
+      maxTokens: 2000,
+    });
+    const fields = extractFields(text);
+    if (!fields) {
+      return sendJson(res, 200, {
+        ok: true, fallback: true, fields: localIdeate(idea, genre),
+        note: "모델 응답을 JSON으로 파싱하지 못해 폴백을 사용했습니다.",
+      });
+    }
+    return sendJson(res, 200, { ok: true, fields });
+  } catch (err) {
+    return sendJson(res, 200, {
+      ok: true, fallback: true, fields: localIdeate(idea, genre),
+      note: err?.message || "생성 실패로 폴백을 사용했습니다.",
+    });
+  }
+}
+
+// 연속 회차 집필: 1화→…→최대 10화. fromChapter부터 count개를 직전 화에 이어 SSE 스트리밍.
+async function handleChapter(req, res) {
+  const payload = await readJson(req);
+  const input = payload.input || {};
+  const model = payload.model || config.defaultModel;
+  const from = Math.max(1, Math.min(MAX_CHAPTER, Number(payload.fromChapter) || 1));
+  const count = Math.max(1, Math.min(5, Number(payload.count) || 1));
+  const end = Math.min(MAX_CHAPTER, from + count - 1);
+  const ctx = payload.ctx || {};
+  let prevText = String(payload.prevText || "");
+
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-store, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  const emit = (type, data) => {
+    res.write(`event: ${type}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+  const controller = new AbortController();
+  req.on("close", () => controller.abort());
+
+  const mode = resolveMode();
+  emit("meta", { from, end, mode });
+
+  try {
+    for (let n = from; n <= end; n++) {
+      emit("chapter-start", { n });
+      if (mode === "local") {
+        const text = localChapter(input, n, prevText);
+        emit("chapter-delta", { n, text });
+        emit("chapter-done", { n, chars: text.length });
+        prevText = text;
+        continue;
+      }
+      let acc = "";
+      const { system, user } = buildChapterPrompt({ input, n, prevText, ctx });
+      const { text } = await streamMessage({
+        provider: mode,
+        model,
+        system,
+        messages: [{ role: "user", content: user }],
+        temperature: 0.85,
+        maxTokens: 3500,
+        signal: controller.signal,
+        onText: (chunk) => { acc += chunk; emit("chapter-delta", { n, text: chunk }); },
+      });
+      const full = text || acc;
+      prevText = full;
+      emit("chapter-done", { n, chars: full.length });
+      if (controller.signal.aborted) break;
+    }
+    emit("done", { from, end });
+  } catch (err) {
+    if (err?.name !== "AbortError") emit("error", { message: err?.message || "원고 생성 오류" });
+  } finally {
+    res.end();
+  }
+}
+
 async function handleApi(req, res, pathname) {
   if (req.method === "GET" && pathname === "/api/health") {
     return sendJson(res, 200, {
@@ -210,6 +326,14 @@ async function handleApi(req, res, pathname) {
       successFormula: SUCCESS_FORMULA,
       failureFormula: FAILURE_FORMULA,
     });
+  }
+
+  if (req.method === "POST" && pathname === "/api/ideate") {
+    return handleIdeate(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/chapter") {
+    return handleChapter(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/run") {
