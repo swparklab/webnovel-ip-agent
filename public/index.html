@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SF WebNovel Future Agent</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="input-panel" aria-label="SF 웹소설 제작 입력 패널">
+        <div class="brand-row">
+          <div>
+            <p class="eyebrow">AI Future Streamer · 박성우</p>
+            <h1>SF WebNovel Future Agent</h1>
+          </div>
+          <span class="status-pill" id="runStatus">대기</span>
+        </div>
+
+        <div class="project-bar">
+          <select id="projectSelect" aria-label="저장된 프로젝트">
+            <option value="">새 프로젝트</option>
+          </select>
+          <div class="project-actions">
+            <button class="mini" id="newProject" type="button" title="새 프로젝트">새로</button>
+            <button class="mini" id="saveProject" type="button" title="현재 프로젝트 저장">저장</button>
+            <button class="mini danger" id="deleteProject" type="button" title="프로젝트 삭제">삭제</button>
+          </div>
+        </div>
+
+        <div class="toolbar" aria-label="주요 명령">
+          <button class="command primary" id="runAgent" type="button" title="SF Agent 실행">
+            <span class="dot"></span>
+            <span>SF Agent 실행</span>
+          </button>
+          <button class="command ghost" id="stopAgent" type="button" hidden title="실행 중단">중단</button>
+          <button class="icon-command" id="loadExample" type="button" title="예시 입력">예시</button>
+          <button class="icon-command" id="exportMarkdown" type="button" title="리포트 내보내기">⬇</button>
+          <button class="icon-command" id="resetForm" type="button" title="초기화">↺</button>
+        </div>
+
+        <form id="agentForm" class="agent-form">
+          <div class="form-section">
+            <p class="section-note">Core IP</p>
+            <label class="field"><span>IP 제목</span>
+              <input id="ipTitle" name="ipTitle" autocomplete="off" placeholder="예: 예언값 0.81의 도시" /></label>
+            <div class="field-pair">
+              <label class="field"><span>장르</span>
+                <select id="genre" name="genre">
+                  <optgroup label="웹소설 메인 장르">
+                    <option value="romanceFantasy">로맨스판타지</option>
+                    <option value="modernFantasy">현대판타지/헌터/시스템</option>
+                    <option value="academyFantasy">판타지/아카데미/게임판타지</option>
+                    <option value="martialArts">무협</option>
+                    <option value="modernRomance">현대 로맨스</option>
+                    <option value="bl">BL</option>
+                    <option value="chaebol">재벌/기업/전문직</option>
+                    <option value="entertainment">연예계/아이돌/스포츠</option>
+                    <option value="altHistory">대체역사/전쟁/밀리터리</option>
+                    <option value="thriller">스릴러/미스터리/공포</option>
+                    <option value="healing">힐링/일상/요리/농장</option>
+                    <option value="sfApocalypse">SF/디스토피아/아포칼립스</option>
+                  </optgroup>
+                  <optgroup label="SF 특화 (세부 스타일)">
+                    <option value="aiForesight">AI 미래예측 SF</option>
+                    <option value="cyberpunk">사이버펑크</option>
+                    <option value="posthuman">포스트휴먼</option>
+                    <option value="climate">기후 SF</option>
+                    <option value="space">우주 개척 SF</option>
+                    <option value="solarpunk">솔라펑크</option>
+                  </optgroup>
+                </select></label>
+              <label class="field"><span>플랫폼</span>
+                <select id="platform" name="platform">
+                  <option value="kakao">카카오페이지</option>
+                  <option value="naver">네이버시리즈</option>
+                  <option value="ridi">리디</option>
+                  <option value="novelpia">노벨피아</option>
+                  <option value="global">글로벌 동시 기획</option>
+                </select></label>
+            </div>
+            <label class="field"><span>타깃 독자</span>
+              <input id="targetReader" name="targetReader" autocomplete="off" placeholder="예: AI 미래, 계급 역전, 빠른 전개를 좋아하는 독자" /></label>
+            <label class="field"><span>한 줄 콘셉트</span>
+              <textarea id="logline" name="logline" rows="3" placeholder="주인공, AI 미래 기술, 사회적 압력, 독자 보상을 한 문장으로"></textarea></label>
+          </div>
+
+          <div class="form-section">
+            <p class="section-note">World Engine</p>
+            <div class="field-pair">
+              <label class="field"><span data-label="futureYear">시대 / 배경</span>
+                <input id="futureYear" name="futureYear" autocomplete="off" placeholder="예: 현대, 2041, 가상 제국 시대" /></label>
+              <label class="field"><span>연재 리듬</span>
+                <select id="cadence" name="cadence">
+                  <option value="daily">매일 연재</option>
+                  <option value="five">주 5회</option>
+                  <option value="three">주 3회</option>
+                  <option value="season">시즌제</option>
+                </select></label>
+            </div>
+            <label class="field"><span data-label="sfPremise">작품 명제 / 핵심 질문</span>
+              <textarea id="sfPremise" name="sfPremise" rows="3" placeholder="이 작품이 던지는 핵심 질문/약속. 예: 정해진 파멸을 아는 사람이 운명을 비틀 수 있는가?"></textarea></label>
+            <label class="field"><span data-label="coreTech">핵심 소재 · 장치</span>
+              <textarea id="coreTech" name="coreTech" rows="3" placeholder="작품을 굴리는 핵심 장치. 예: 원작 지식·상태창·계약결혼·회귀·비급·미래 정보"></textarea></label>
+            <label class="field"><span data-label="scienceConstraint">핵심 제약 · 규칙</span>
+              <textarea id="scienceConstraint" name="scienceConstraint" rows="3" placeholder="그 장치가 마음대로 되지 않는 이유·대가·한계"></textarea></label>
+            <label class="field"><span data-label="socialShift">세계 · 사회 · 관계 구조</span>
+              <textarea id="socialShift" name="socialShift" rows="3" placeholder="신분·계급·권력·가족·관계가 어떻게 작동하고 주인공을 압박하는지"></textarea></label>
+          </div>
+
+          <div class="form-section">
+            <p class="section-note">Conflict Cast</p>
+            <div class="field-pair">
+              <label class="field"><span>주인공</span>
+                <input id="protagonist" name="protagonist" autocomplete="off" placeholder="이름, 직업, 결핍" /></label>
+              <label class="field"><span>핵심 욕망</span>
+                <input id="desire" name="desire" autocomplete="off" placeholder="생존, 자유, 복수, 진실" /></label>
+            </div>
+            <label class="field"><span data-label="aiEntity">핵심 존재 (조력/적대/시스템)</span>
+              <input id="aiEntity" name="aiEntity" autocomplete="off" placeholder="예: 도시 AI 오라클-9 / 집착 남주 / 상태창 시스템 (없으면 비워둠)" /></label>
+            <label class="field"><span>적대 압력</span>
+              <input id="antagonist" name="antagonist" autocomplete="off" placeholder="예: 알고리즘 신분제, AI 규제청, 데이터 귀족" /></label>
+            <label class="field"><span>세계 규칙</span>
+              <textarea id="worldRule" name="worldRule" rows="3" placeholder="이 세계에서 반복 작동하는 규칙, 금기, 보상, 비용"></textarea></label>
+            <label class="field"><span>시즌 목표</span>
+              <input id="seasonGoal" name="seasonGoal" autocomplete="off" placeholder="예: 25화 안에 도시 예측 모델의 거짓 양성을 폭로한다" /></label>
+            <label class="field"><span>톤 앤 매너</span>
+              <input id="tone" name="tone" autocomplete="off" placeholder="예: 차갑고 빠른 문장, 감정은 절제, 절단은 강하게" /></label>
+          </div>
+
+          <div class="form-section">
+            <p class="section-note">Draft &amp; Feedback</p>
+            <label class="field"><span>원고 일부</span>
+              <textarea id="manuscript" name="manuscript" rows="5" placeholder="오프닝, 최근 회차, 또는 쓰고 싶은 장면 메모"></textarea></label>
+            <label class="field"><span>댓글 / 지표</span>
+              <textarea id="feedback" name="feedback" rows="4" placeholder="댓글, 선작 변화, 이탈 구간, 독자 반응"></textarea></label>
+            <div class="switches" aria-label="확장 옵션">
+              <label class="switch"><input id="webtoonBranch" type="checkbox" checked /><span>웹툰 분기</span></label>
+              <label class="switch"><input id="globalBranch" type="checkbox" checked /><span>글로벌</span></label>
+              <label class="switch"><input id="fanCommunity" type="checkbox" checked /><span>팬 채널</span></label>
+              <label class="switch"><input id="commerceBranch" type="checkbox" /><span>굿즈</span></label>
+            </div>
+          </div>
+        </form>
+      </aside>
+
+      <main class="workspace">
+        <section class="workspace-head" aria-label="Agent 요약">
+          <div>
+            <p class="eyebrow">AI Future SF Production OS</p>
+            <h2 id="workspaceTitle">AI 미래 SF 제작실</h2>
+          </div>
+          <div class="head-actions">
+            <label class="model-pick">
+              <span>모델</span>
+              <select id="modelSelect" aria-label="LLM 모델"></select>
+            </label>
+            <span class="metric-chip" id="modeChip">모드 확인 중…</span>
+            <span class="metric-chip" id="readinessChip">제작도 0%</span>
+            <span class="metric-chip accent" id="usageChip">토큰 0</span>
+          </div>
+        </section>
+
+        <section class="notice" id="keyNotice" hidden>
+          <strong>로컬 폴백 모드</strong>
+          <span>ANTHROPIC_API_KEY가 설정되지 않아 결정론적 미리보기로 동작합니다. 실제 Claude 생성을 켜려면 <code>.env</code>에 키를 넣고 서버를 재시작하세요.</span>
+        </section>
+
+        <section class="agent-grid" aria-label="Agent 상태" id="agentGrid"></section>
+
+        <section class="output-workbench" aria-label="SF Agent 출력">
+          <div class="tabs" role="tablist" id="tabBar"></div>
+          <div id="outputPanel" class="output-panel" aria-live="polite"></div>
+        </section>
+
+        <footer class="app-footer" aria-label="제작 정보">
+          <span class="footer-brand">AI Future Streamer <strong>박성우</strong></span>
+          <span class="footer-meta">SF WebNovel Future Agent · AI Future SF Production OS</span>
+        </footer>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" hidden></div>
+
+    <script src="markdown.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

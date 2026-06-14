@@ -1,0 +1,15 @@
+{
+  "name": "sf-webnovel-future-agent",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Commercial AI agent tool that turns an AI-future SF premise into a production-ready webnovel IP using a real Claude-powered agent pipeline.",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js",
+    "check": "node --check server.js && node --check lib/config.js && node --check lib/anthropic.js && node --check lib/claude-cli.js && node --check lib/llm.js && node --check lib/playbook.js && node --check lib/agents.js && node --check lib/orchestrator.js && node --check lib/store.js && node --check lib/local-engine.js",
+    "health": "node -e \"fetch('http://127.0.0.1:4173/api/health').then(r=>r.json()).then(console.log)\""
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
