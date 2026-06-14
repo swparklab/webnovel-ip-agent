@@ -5,9 +5,14 @@ const fs = require("fs");
 const path = require("path");
 
 const { config, resolveMode, publicConfig } = require("./lib/config");
-const { runPipeline } = require("./lib/orchestrator");
+const { runPipeline, pipelineAgents } = require("./lib/orchestrator");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
+const { buildOpsLocalReport } = require("./lib/platform-local");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
+const {
+  PLATFORMS, TAXONOMY, PERSONAS, KR_SF_OVERLAY, REACTION_AXES,
+  SUCCESS_FORMULA, FAILURE_FORMULA,
+} = require("./lib/platform-intel");
 const store = require("./lib/store");
 
 const publicDir = path.join(config.rootDir, "public");
@@ -25,6 +30,14 @@ const MIME = {
 
 // Order used when assembling a project into a single Markdown export.
 const AGENT_ORDER = ["foresight", "world", "plot", "draft", "reader", "osmu"];
+const OPS_AGENT_ORDER = ["tagger", "reaction", "fit", "packaging", "strategy"];
+
+// Resolve the export/iteration order for whichever pipeline produced a report.
+function orderFor(record) {
+  const agents = record?.report?.agents || record?.agents || {};
+  const isOps = OPS_AGENT_ORDER.some((id) => id in agents);
+  return isOps ? OPS_AGENT_ORDER : AGENT_ORDER;
+}
 
 function sendJson(res, status, payload) {
   const body = JSON.stringify(payload, null, 2);
@@ -75,7 +88,7 @@ function reportToMarkdown(record) {
     `- 제작도: ${record.score ?? scoreInput(input)}%`,
     "",
   ];
-  AGENT_ORDER.forEach((id) => {
+  orderFor(record).forEach((id) => {
     const agent = agents[id];
     if (!agent) return;
     lines.push(`---`, "", `# ${agent.name}`, "", agent.text || agent.error || "", "");
@@ -89,7 +102,11 @@ async function handleRun(req, res) {
   const payload = await readJson(req);
   const input = payload.input || {};
   const model = payload.model || config.defaultModel;
-  const score = scoreInput(input);
+  const pipeline = payload.pipeline === "platform" ? "platform" : "production";
+  const isOps = pipeline === "platform";
+  const order = isOps ? OPS_AGENT_ORDER : AGENT_ORDER;
+  // 제작도 점수는 제작실 입력에만 의미가 있다. 운영실은 0으로 둔다.
+  const score = isOps ? 0 : scoreInput(input);
 
   // Open the SSE stream.
   res.writeHead(200, {
@@ -113,7 +130,7 @@ async function handleRun(req, res) {
   try {
     if (mode === "local") {
       // No engine available: stream the deterministic fallback so the product still demos.
-      const report = buildLocalReport(input);
+      const report = isOps ? buildOpsLocalReport(input) : buildLocalReport(input);
       emit("start", {
         model: report.model,
         fallback: true,
@@ -121,7 +138,7 @@ async function handleRun(req, res) {
           id: a.id, name: a.name, tabs: a.tabs,
         })),
       });
-      for (const id of AGENT_ORDER) {
+      for (const id of order) {
         const agent = report.agents[id];
         if (!agent) continue;
         emit("status", { agent: id, state: "running" });
@@ -134,6 +151,7 @@ async function handleRun(req, res) {
       const report = await runPipeline(input, {
         model,
         provider: mode, // 'api' or 'cli'
+        agents: pipelineAgents(pipeline),
         emit,
         signal: controller.signal,
       });
@@ -178,6 +196,19 @@ async function handleApi(req, res, pathname) {
         checklist: COMMON.checklist,
       },
       platformPriority: PLATFORM_PRIORITY,
+    });
+  }
+
+  if (req.method === "GET" && pathname === "/api/platform-meta") {
+    return sendJson(res, 200, {
+      ok: true,
+      platforms: PLATFORMS,
+      taxonomy: TAXONOMY,
+      personas: PERSONAS,
+      overlay: KR_SF_OVERLAY,
+      reactionAxes: REACTION_AXES,
+      successFormula: SUCCESS_FORMULA,
+      failureFormula: FAILURE_FORMULA,
     });
   }
 

@@ -17,6 +17,11 @@
           <span class="status-pill" id="runStatus">대기</span>
         </div>
 
+        <div class="studio-switch" role="tablist" aria-label="스튜디오 전환">
+          <button class="studio-btn active" id="studioProduction" type="button" data-studio="production" title="작품을 생성하는 제작실">제작실</button>
+          <button class="studio-btn" id="studioPlatform" type="button" data-studio="platform" title="플랫폼별 태깅·번역·전략 운영실">운영실</button>
+        </div>
+
         <div class="project-bar">
           <select id="projectSelect" aria-label="저장된 프로젝트">
             <option value="">새 프로젝트</option>
@@ -85,7 +90,21 @@
               <textarea id="logline" name="logline" rows="3" placeholder="주인공, AI 미래 기술, 사회적 압력, 독자 보상을 한 문장으로"></textarea></label>
           </div>
 
-          <div class="form-section">
+          <div class="form-section ops-only" hidden>
+            <p class="section-note">Operations Target</p>
+            <label class="field"><span>핵심 태그 (작가가 쓰는)</span>
+              <textarea id="coreTags" name="coreTags" rows="2" placeholder="예: AI예측, 시스템, 사이다, 디스토피아, 회귀"></textarea></label>
+            <div class="switches" aria-label="타깃 플랫폼">
+              <label class="switch"><input id="tpRoyalroad" type="checkbox" data-platform="royalroad" checked /><span>Royal Road</span></label>
+              <label class="switch"><input id="tpHfy" type="checkbox" data-platform="hfy" /><span>r/HFY</span></label>
+              <label class="switch"><input id="tpWebnovel" type="checkbox" data-platform="webnovel" checked /><span>Webnovel</span></label>
+              <label class="switch"><input id="tpNaver" type="checkbox" data-platform="naver" checked /><span>네이버시리즈</span></label>
+              <label class="switch"><input id="tpKakao" type="checkbox" data-platform="kakao" checked /><span>카카오페이지</span></label>
+            </div>
+            <p class="section-hint">운영실은 아래 <strong>핵심 콘셉트</strong>(제목·시놉시스·장르)와 <strong>샘플 챕터·리뷰</strong>를 입력으로 씁니다.</p>
+          </div>
+
+          <div class="form-section prod-only">
             <p class="section-note">World Engine</p>
             <div class="field-pair">
               <label class="field"><span data-label="futureYear">시대 / 배경</span>
@@ -108,7 +127,7 @@
               <textarea id="socialShift" name="socialShift" rows="3" placeholder="신분·계급·권력·가족·관계가 어떻게 작동하고 주인공을 압박하는지"></textarea></label>
           </div>
 
-          <div class="form-section">
+          <div class="form-section prod-only">
             <p class="section-note">Conflict Cast</p>
             <div class="field-pair">
               <label class="field"><span>주인공</span>
@@ -129,12 +148,12 @@
           </div>
 
           <div class="form-section">
-            <p class="section-note">Draft &amp; Feedback</p>
-            <label class="field"><span>원고 일부</span>
+            <p class="section-note" data-label="draftSection">Draft &amp; Feedback</p>
+            <label class="field"><span data-label="manuscript">원고 일부</span>
               <textarea id="manuscript" name="manuscript" rows="5" placeholder="오프닝, 최근 회차, 또는 쓰고 싶은 장면 메모"></textarea></label>
-            <label class="field"><span>댓글 / 지표</span>
+            <label class="field"><span data-label="feedback">댓글 / 지표</span>
               <textarea id="feedback" name="feedback" rows="4" placeholder="댓글, 선작 변화, 이탈 구간, 독자 반응"></textarea></label>
-            <div class="switches" aria-label="확장 옵션">
+            <div class="switches prod-only" aria-label="확장 옵션">
               <label class="switch"><input id="webtoonBranch" type="checkbox" checked /><span>웹툰 분기</span></label>
               <label class="switch"><input id="globalBranch" type="checkbox" checked /><span>글로벌</span></label>
               <label class="switch"><input id="fanCommunity" type="checkbox" checked /><span>팬 채널</span></label>

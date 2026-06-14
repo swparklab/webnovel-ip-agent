@@ -6,5 +6,9 @@ data/projects/
 *.log
 .DS_Store
 
+# 비공개 자료 — secret/ 폴더의 모든 파일은 절대 커밋/업로드 금지
+secret/
+secret/**
+
 # Claude Code local settings
 .claude/settings.local.json

@@ -2,7 +2,8 @@
 
 /* ----------------------------- Static config ---------------------------- */
 
-const AGENTS = [
+// 제작실(Production) — 작품을 생성하는 Narrative Intelligence 파이프라인.
+const PRODUCTION_AGENTS = [
   { id: "foresight", name: "Foresight Agent", tab: "제작 브리프", sub: "작품 명제·장르 약속·제목" },
   { id: "world", name: "세계관 바이블", tab: "세계관 바이블", sub: "설정·장치·타임라인" },
   { id: "plot", name: "Plot Engine", tab: "시즌 설계", sub: "25화·초반 12화" },
@@ -10,6 +11,19 @@ const AGENTS = [
   { id: "reader", name: "Reader Sim", tab: "검수·독자", sub: "흥행 평가·리스크·반응" },
   { id: "osmu", name: "OSMU Agent", tab: "OSMU", sub: "웹툰·글로벌·팬·굿즈" },
 ];
+
+// 운영실(Operations) — 플랫폼별 패키징·운영을 담당하는 Platform Intelligence 파이프라인.
+const PLATFORM_AGENTS = [
+  { id: "tagger", name: "자동 태깅기", tab: "태깅", sub: "6층 분류체계·리스크" },
+  { id: "reaction", name: "반응 분석기", tab: "반응 분석", sub: "6축 좋아요/싫어요·신뢰도" },
+  { id: "fit", name: "플랫폼 적합도", tab: "적합도", sub: "RR·Webnovel·한국 진입성" },
+  { id: "packaging", name: "플랫폼 번역기", tab: "패키징", sub: "제목·블럽·태그·오버레이" },
+  { id: "strategy", name: "전략 리포터", tab: "전략", sub: "성공식·KPI·주간 액션" },
+];
+
+const STUDIOS = { production: PRODUCTION_AGENTS, platform: PLATFORM_AGENTS };
+// 현재 스튜디오의 에이전트 목록. 토글 시 교체된다(아래 렌더 함수들이 모두 참조).
+let AGENTS = PRODUCTION_AGENTS;
 
 // 장르 패밀리에 따라 SF 전용 필드 라벨을 전환한다.
 const FIELD_LABELS = {
@@ -28,8 +42,11 @@ const SELECTORS = [
   "cadence", "sfPremise", "coreTech", "scienceConstraint", "socialShift",
   "protagonist", "desire", "aiEntity", "antagonist", "worldRule", "seasonGoal",
   "tone", "manuscript", "feedback", "webtoonBranch", "globalBranch",
-  "fanCommunity", "commerceBranch",
+  "fanCommunity", "commerceBranch", "coreTags",
 ];
+
+// 운영실 타깃 플랫폼 체크박스 (data-platform).
+const PLATFORM_CHECKS = ["tpRoyalroad", "tpHfy", "tpWebnovel", "tpNaver", "tpKakao"];
 
 const MODEL_LABELS = { quality: "Opus 4.8 (최고 품질)", balanced: "Sonnet 4.6 (빠름)", fast: "Haiku 4.5 (초고속)" };
 
@@ -73,13 +90,15 @@ const DEFAULTS = Object.fromEntries(
 Object.assign(DEFAULTS, { genre: "aiForesight", platform: "kakao", cadence: "daily", futureYear: "2041" });
 ["ipTitle", "targetReader", "logline", "sfPremise", "coreTech", "scienceConstraint",
  "socialShift", "protagonist", "desire", "aiEntity", "antagonist", "worldRule",
- "seasonGoal", "tone", "manuscript", "feedback"].forEach((id) => (DEFAULTS[id] = ""));
+ "seasonGoal", "tone", "manuscript", "feedback", "coreTags"].forEach((id) => (DEFAULTS[id] = ""));
 DEFAULTS.commerceBranch = false;
 
 /* ------------------------------- App state ------------------------------ */
 
 const state = {
+  studio: "production",  // 'production' | 'platform'
   activeTab: "foresight",
+  platformMeta: null,
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
   errors: {},
@@ -156,6 +175,49 @@ const GENRE_LABELS_KO = {
   healing: "힐링/일상", sfApocalypse: "SF/아포칼립스",
 };
 
+/* ------------------------------- Studio --------------------------------- */
+
+// 운영실에서 공유 필드(원고/피드백)의 라벨을 운영 맥락으로 바꾼다.
+function applyStudioLabels(ops) {
+  const set = (label, text) => {
+    const span = document.querySelector(`[data-label="${label}"]`);
+    if (span) span.textContent = text;
+  };
+  set("draftSection", ops ? "Sample & Reviews" : "Draft & Feedback");
+  set("manuscript", ops ? "샘플 챕터" : "원고 일부");
+  set("feedback", ops ? "붙여넣은 리뷰 / 댓글" : "댓글 / 지표");
+}
+
+// 제작실 ↔ 운영실 전환: 에이전트 목록·입력 패널·탭을 통째로 스왑한다.
+function setStudio(studio, opts = {}) {
+  if (!STUDIOS[studio]) return;
+  state.studio = studio;
+  AGENTS = STUDIOS[studio];
+  const ops = studio === "platform";
+
+  document.querySelectorAll(".studio-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.studio === studio));
+  document.querySelectorAll(".prod-only").forEach((n) => { n.hidden = ops; });
+  document.querySelectorAll(".ops-only").forEach((n) => { n.hidden = !ops; });
+  applyStudioLabels(ops);
+
+  const runLabel = el("runAgent")?.querySelector("span:last-child");
+  if (runLabel) runLabel.textContent = ops ? "운영 분석 실행" : "SF Agent 실행";
+  el("workspaceTitle").textContent = ops
+    ? "플랫폼 운영실"
+    : (el("ipTitle").value || "AI 미래 SF 제작실");
+
+  AGENTS.forEach((a) => { if (!(a.id in state.statuses)) state.statuses[a.id] = "idle"; });
+  renderAgentGrid();
+  renderTabs();
+  setActiveTab(AGENTS[0].id);
+  localStorage.setItem("sfAgentStudio", studio);
+  if (!opts.silent) {
+    el("runStatus").textContent = ops ? "운영실" : "제작실";
+    toast(ops ? "운영실(Platform Intelligence)로 전환했습니다." : "제작실로 전환했습니다.", "info");
+  }
+}
+
 /* ------------------------------- Helpers -------------------------------- */
 
 const el = (id) => document.getElementById(id);
@@ -173,8 +235,16 @@ function collectInput() {
   const input = {};
   SELECTORS.forEach((id) => {
     const node = el(id);
+    if (!node) return;
     input[id] = node.type === "checkbox" ? node.checked : node.value.trim();
   });
+  // 운영실 타깃 플랫폼: 체크된 data-platform을 콤마 문자열로.
+  input.targetPlatforms = PLATFORM_CHECKS
+    .map((id) => el(id))
+    .filter((n) => n && n.checked)
+    .map((n) => n.dataset.platform)
+    .join(",");
+  input.studio = state.studio;
   return input;
 }
 
@@ -185,6 +255,13 @@ function fillForm(data) {
     if (node.type === "checkbox") node.checked = Boolean(data[id]);
     else node.value = data[id] ?? "";
   });
+  if (typeof data.targetPlatforms === "string") {
+    const set = new Set(data.targetPlatforms.split(",").map((s) => s.trim()).filter(Boolean));
+    PLATFORM_CHECKS.forEach((id) => {
+      const node = el(id);
+      if (node) node.checked = set.has(node.dataset.platform);
+    });
+  }
 }
 
 /* ------------------------------ Rendering ------------------------------- */
@@ -209,8 +286,14 @@ function renderAgentGrid() {
   });
 }
 
+function extraTab() {
+  return state.studio === "platform"
+    ? { id: "guide", label: "운영 가이드" }
+    : { id: "prompts", label: "Prompt Pack" };
+}
+
 function renderTabs() {
-  const tabs = [...AGENTS.map((a) => ({ id: a.id, label: a.tab })), { id: "prompts", label: "Prompt Pack" }];
+  const tabs = [...AGENTS.map((a) => ({ id: a.id, label: a.tab })), extraTab()];
   el("tabBar").innerHTML = tabs.map((t) => `
     <button class="tab${t.id === state.activeTab ? " active" : ""}" type="button" data-tab="${t.id}">${t.label}</button>`).join("");
   document.querySelectorAll(".tab").forEach((btn) => {
@@ -301,9 +384,56 @@ function playbookHtml(genre, data) {
   return window.renderMarkdown(md);
 }
 
+async function ensurePlatformMeta() {
+  if (state.platformMeta) return state.platformMeta;
+  try {
+    const res = await fetch("/api/platform-meta");
+    const data = await res.json();
+    if (data.ok) {
+      state.platformMeta = data;
+      if (state.activeTab === "guide") renderActiveTab();
+      return data;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function guideHtml(meta) {
+  if (!meta) return "<p>운영 가이드 불러오는 중…</p>";
+  const plat = Object.values(meta.platforms || {}).map(
+    (p) => `| ${p.label} | ${p.surface} | ${p.rules} | ${p.implication} |`,
+  );
+  const tax = (meta.taxonomy || []).map((t) => `| ${t.layer} | ${t.use} | ${t.tags.join(", ")} |`);
+  const persona = (meta.personas || []).map((p) => `| ${p[0]} | ${p[1]} | ${p[2]} | ${p[3]} |`);
+  const md = [
+    "## 운영실 — Platform Intelligence",
+    "> 같은 작품을 플랫폼마다 다르게 설명·태깅·연재·대응하기 위한 운영 지식 베이스입니다.",
+    "",
+    `**성공식** — ${meta.successFormula}`,
+    "",
+    `**실패식** — ${meta.failureFormula}`,
+    "",
+    "### 플랫폼 지형",
+    "| 플랫폼 | 표면 | 규칙 | 운영 시사점 |", "|---|---|---|---|", ...plat,
+    "",
+    "### 6층 태깅 분류체계",
+    "| 층위 | 용도 | 예시 태그 |", "|---|---|---|", ...tax,
+    "",
+    "### 독자 페르소나",
+    "| 페르소나 | 플랫폼 | 반응하는 것 | 도구가 할 일 |", "|---|---|---|---|", ...persona,
+  ].join("\n");
+  return window.renderMarkdown(md);
+}
+
 function renderActiveTab() {
   const panel = el("outputPanel");
   const id = state.activeTab;
+
+  if (id === "guide") {
+    panel.innerHTML = `<div class="md-output">${guideHtml(state.platformMeta)}</div>`;
+    if (!state.platformMeta) ensurePlatformMeta();
+    return;
+  }
 
   if (id === "prompts") {
     const genre = collectInput().genre;
@@ -325,7 +455,7 @@ function renderActiveTab() {
   }
 
   if (!buffer && st === "idle") {
-    panel.innerHTML = `<div class="empty-state">‘SF Agent 실행’을 누르면 <strong>${AGENTS.find((a) => a.id === id)?.name}</strong> 산출물이 여기에 실시간으로 생성됩니다.</div>`;
+    panel.innerHTML = `<div class="empty-state">‘${state.studio === "platform" ? "운영 분석 실행" : "SF Agent 실행"}’을 누르면 <strong>${AGENTS.find((a) => a.id === id)?.name}</strong> 산출물이 여기에 실시간으로 생성됩니다.</div>`;
     return;
   }
 
@@ -399,17 +529,18 @@ async function runAgent() {
   resetRun();
 
   // Jump to the first agent's tab so the user sees streaming immediately.
-  setActiveTab("foresight");
+  setActiveTab(AGENTS[0].id);
 
   const controller = new AbortController();
   state.controller = controller;
   const model = el("modelSelect").value || state.config.defaultModel;
+  const pipeline = state.studio === "platform" ? "platform" : "production";
 
   try {
     const res = await fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ input, model }),
+      body: JSON.stringify({ input, model, pipeline }),
       signal: controller.signal,
     });
     if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
@@ -520,8 +651,10 @@ async function openProject(id) {
     if (!data.ok) throw new Error("불러오기 실패");
     const p = data.project;
     state.currentProjectId = p.id;
+    // 저장된 스튜디오로 먼저 전환해 입력 패널/탭을 맞춘다.
+    setStudio(p.input?.studio === "platform" ? "platform" : "production", { silent: true });
     fillForm(p.input || {});
-    onGenreChange(false); // 불러온 장르에 맞춰 라벨 적용 (프리셋 덮어쓰기 없음)
+    if (state.studio === "production") onGenreChange(false); // 장르 라벨 적용
     resetRun();
     if (p.report?.agents) {
       Object.values(p.report.agents).forEach((a) => {
@@ -535,8 +668,8 @@ async function openProject(id) {
     }
     state.score = p.score ?? 0;
     el("readinessChip").textContent = `제작도 ${state.score}%`;
-    el("workspaceTitle").textContent = p.title || "AI 미래 SF 제작실";
-    setActiveTab("foresight");
+    el("workspaceTitle").textContent = p.title || (state.studio === "platform" ? "플랫폼 운영실" : "AI 미래 SF 제작실");
+    setActiveTab(AGENTS[0].id);
     toast("프로젝트를 불러왔습니다.", "success");
   } catch (err) {
     toast(err.message || "불러오기 실패", "error");
@@ -547,11 +680,12 @@ function newProject() {
   state.currentProjectId = "";
   el("projectSelect").value = "";
   fillForm(DEFAULTS);
-  onGenreChange(false); // 적응형 라벨 갱신 (프리셋은 덮어쓰지 않음)
-  el("workspaceTitle").textContent = "웹소설 제작실";
+  if (state.studio === "production") onGenreChange(false); // 적응형 라벨 갱신
+  el("workspaceTitle").textContent = state.studio === "platform" ? "플랫폼 운영실" : "웹소설 제작실";
   state.score = 0;
   el("readinessChip").textContent = "제작도 0%";
   resetRun();
+  setActiveTab(AGENTS[0].id);
 }
 
 async function deleteProject() {
@@ -663,6 +797,9 @@ function boot() {
   el("newProject").addEventListener("click", newProject);
   el("deleteProject").addEventListener("click", deleteProject);
   el("projectSelect").addEventListener("change", (e) => openProject(e.target.value));
+  // 제작실 ↔ 운영실 전환
+  document.querySelectorAll(".studio-btn").forEach((btn) =>
+    btn.addEventListener("click", () => setStudio(btn.dataset.studio)));
   // 장르 변경(사용자 선택): 적응형 라벨 + 기본 예시 자동 채움
   el("genre").addEventListener("change", () => onGenreChange(true));
   el("agentForm").addEventListener("input", () => {
@@ -676,6 +813,10 @@ function boot() {
   loadProjects();
   // 초기 장르에 맞춰 라벨만 적용 (프리셋은 덮어쓰지 않음)
   onGenreChange(false);
+  // 마지막으로 쓰던 스튜디오 복원
+  if (localStorage.getItem("sfAgentStudio") === "platform") {
+    setStudio("platform", { silent: true });
+  }
 }
 
 document.addEventListener("DOMContentLoaded", boot);

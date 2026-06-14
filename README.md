@@ -95,6 +95,17 @@ server.js          HTTP 서버 · SSE · REST 라우팅
 
 오케스트레이터가 `dependsOn`을 분석해 같은 단계의 에이전트(Plot·OSMU)는 병렬로 실행하고, 앞 단계 산출물을 다음 단계 프롬프트에 주입합니다.
 
+### 두 개의 스튜디오 — 제작실 + 운영실
+
+상단 토글로 **제작실(Production)** 과 **운영실(Operations)** 을 전환합니다. `deep-research-report2.md`의 결론 — *"이 에이전트는 ‘좋은 SF를 생성하는 모델’이 아니라, 플랫폼별 취향·규칙·노출 구조를 학습해 SF를 패키징·운영하는 시스템이어야 한다"* — 을 반영해, 생성(Narrative Intelligence)과 운영(Platform Intelligence)을 분리했습니다. 누가 쓰고 무엇이 갱신됐는지는 [`OPERATIONS-STUDIO.md`](OPERATIONS-STUDIO.md) 참고.
+
+| 스튜디오 | 역할 | 에이전트 |
+|---|---|---|
+| 제작실 (Narrative Intelligence) | 프리미스 → 연재 IP 생성 | Foresight · 세계관 · Plot · Draft · Reader · OSMU |
+| 운영실 (Platform Intelligence) | 같은 작품을 플랫폼별로 태깅·번역·운영 | 자동 태깅기 · 반응 분석기 · 플랫폼 적합도 · 플랫폼 번역기 · 전략 리포터 |
+
+운영실 5 에이전트는 6층 태깅 분류체계, HFY/Royal Road/Webnovel/네이버/카카오 플랫폼 규칙, 한국형 SF 오버레이, 성공식/실패식을 `lib/platform-intel.js`에 구조화 데이터로 인코딩해 동작합니다. 입력은 작품 제목·시놉시스·핵심 태그·타깃 플랫폼·샘플 챕터·붙여넣은 리뷰이며, `POST /api/run`에 `pipeline: "platform"`로 전달됩니다. 키가 없어도 운영실 전용 결정론적 폴백(`lib/platform-local.js`)으로 데모가 동작합니다.
+
 ### 흥행 문법 탑재 (Genre Success Playbook)
 
 `lib/playbook.js`에 「SF 하위 장르별 웹소설 흥행 문법 설계서」를 **구조화 데이터로 인코딩**해, 모든 에이전트가 선택 장르의 검증된 성공 공식 위에서 생성하도록 했습니다. 설계서의 핵심 원칙 — *"장르를 생성하지 말고, 결핍-특권-반복보상-세계확장 구조를 생성한다"* — 을 파이프라인 전체에 강제합니다.
@@ -125,7 +136,8 @@ SF 전용 플랫폼에서 **전 장르 웹소설 제작 플랫폼**으로 확장
 |---|---|---|
 | `/api/health` | GET | 서버 상태 · 동작 모드 |
 | `/api/config` | GET | 키 설정 여부 · 선택 가능 모델 |
-| `/api/run` | POST | **SSE 스트림**: 6-에이전트 파이프라인 실시간 생성 |
+| `/api/run` | POST | **SSE 스트림**: `pipeline`(`production`\|`platform`)에 따라 제작실/운영실 파이프라인 실시간 생성 |
+| `/api/platform-meta` | GET | 운영실 지식 베이스(플랫폼 규칙·6층 분류체계·페르소나·성공/실패식) |
 | `/api/projects` | GET / POST | 프로젝트 목록 / 저장(생성·수정) |
 | `/api/projects/:id` | GET / DELETE | 프로젝트 조회 / 삭제 |
 | `/api/export` | POST | 통합 Markdown 리포트 생성 |
