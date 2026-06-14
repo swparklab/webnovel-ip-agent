@@ -1,9 +1,13 @@
-# SF WebNovel Future Agent
+# 🚀 SF WebNovel Future Agent
 
-박성우 `AI FORESIGHT` 관점을 바탕으로 만든 **AI 미래 SF 웹소설 제작 AI Agent 툴**입니다.
+> **An AI-future SF webnovel IP production agent** — turns a single future premise into a production-ready webnovel IP through a real Claude-powered, 6-agent orchestration pipeline.
+
+박성우(AI FUTURE STREAMER)의 `AI FORESIGHT` 관점을 바탕으로 만든 **AI 미래 SF 웹소설 제작 AI Agent 툴**입니다.
 실제 Claude(Anthropic) API로 동작하는 6-에이전트 오케스트레이션 파이프라인이 작품 기획을 받아 SF Bible, 시즌 설계, 1화 원고, 검수, OSMU까지 **실시간 스트리밍**으로 생성합니다.
 
 > v1은 키 없이 도는 결정론적 시뮬레이터였습니다. v2는 실제 LLM 연동 · 스트리밍 · 프로젝트 저장 · 안전한 키 관리를 갖춘 **상업 운영용 MVP**입니다.
+
+<sub>Node.js 18+ · Zero-dependency backend · Anthropic Claude (Opus / Sonnet / Haiku) · Made by **Park Seong-Woo (박성우)**</sub>
 
 ## 빠른 시작
 
@@ -153,6 +157,24 @@ SF 전용 플랫폼에서 **전 장르 웹소설 제작 플랫폼**으로 확장
 - 인증(세션/JWT) 미들웨어 추가 → 로그인
 - `/api/run`에 사용량 집계 + Stripe 연동 → 크레딧/구독 과금
 - 컨테이너화(Dockerfile) 후 클라우드 배포
+
+## 👤 개발자 (Developer)
+
+**박성우 (Park Seong-Woo)** — *AI FUTURE STREAMER · AI Futurist · FUTURE AI Engineer*
+
+인공지능 · 인간의 창의성 · 물리적 지능(Physical AI) · 자율 시스템이 수렴하는 미래를 만드는 일을 합니다. 콘텐츠 · 인텔리전스 · 피지컬 월드를 가로지르는 AI 시스템을 설계하며, 인간-AI 협업과 자율 지능의 미래를 탐구합니다.
+
+| 소속 | 역할 | 분야 |
+|---|---|---|
+| **AIMZ Media** | Co-Founder & VP | GenAI 콘텐츠 엔지니어링 — 오리지널 IP 애니메이션 제작, AI 워크플로우 자동화, 3DGS/NeRF 기반 공간 콘텐츠 |
+| **DPAX.AI** | Advisor | Physical AI & 로보틱스 — 외골격(Exoskeleton) 하드웨어, 휴먼 모션 데이터, 로봇 통합·제어, XR 데이터 수집 |
+| **DeepAgent** | Founder & CEO | 자율 인텔리전스 & 미래예측 플랫폼 — 멀티 에이전트, 투자·시장 인텔리전스, 전략 시나리오 모델링 |
+
+**🌎 Vision** — 미래는 인간 지능, 인공지능, 자율 시스템의 수렴으로 빚어집니다. 인간과 지능형 기계가 협력해 지식을 확장하고 혁신을 가속하며, 물리·디지털·사회 영역에서 새로운 가능성을 여는 세상을 만드는 것이 목표입니다.
+
+> *Building the Future of AI, Physical Intelligence, and Human Creativity* 🚀
+
+이 프로젝트는 그 비전 위에서 — **AI 미래예측(Foresight)을 실제 연재 가능한 SF/웹소설 IP로 변환하는 제작 운영체제** — 로 만들어졌습니다.
 
 ## 라이선스 / 비용 주의
 
