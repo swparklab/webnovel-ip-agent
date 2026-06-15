@@ -13,6 +13,7 @@ const {
 } = require("./lib/chapters");
 const { extractTextFromPdf } = require("./lib/pdf");
 const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/critique");
+const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
@@ -225,6 +226,33 @@ async function handleReference(req, res) {
   });
 }
 
+// 완성도 심사: 작품 발췌(digest)를 공모전 본심 기준으로 심사. SSE 아님.
+async function handleAudit(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+  if (!digest.trim()) return sendJson(res, 400, { ok: false, error: "심사할 원고가 없습니다." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, audit: localAudit(input, digest) });
+  }
+  try {
+    const { system, user } = buildWorkAuditPrompt({ input, digest });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.45, maxTokens: 2600,
+    });
+    const audit = parseAudit(text);
+    if (!audit) return sendJson(res, 200, { ok: true, audit: localAudit(input, digest), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, audit });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, audit: localAudit(input, digest), note: err?.message });
+  }
+}
+
 // 회차 자체 피드백: 한 회차를 평가하고 수정 지시(JSON)를 반환. SSE 아님.
 async function handleCritique(req, res) {
   const payload = await readJson(req);
@@ -259,15 +287,16 @@ async function handleIdeate(req, res) {
   const payload = await readJson(req);
   const idea = String(payload.idea || "").trim();
   const genre = payload.genre || "aiForesight";
+  const subgenre = payload.subgenre || "";
   const model = payload.model || config.defaultModel;
   if (!idea) return sendJson(res, 400, { ok: false, error: "아이디어를 입력하세요." });
 
   const mode = resolveMode();
   if (mode === "local") {
-    return sendJson(res, 200, { ok: true, fallback: true, fields: localIdeate(idea, genre) });
+    return sendJson(res, 200, { ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre) });
   }
   try {
-    const { system, user } = buildIdeatePrompt(idea, genre);
+    const { system, user } = buildIdeatePrompt(idea, genre, subgenre);
     const { text } = await streamMessage({
       provider: mode, // 'api' | 'cli'
       model,
@@ -279,14 +308,14 @@ async function handleIdeate(req, res) {
     const fields = extractFields(text);
     if (!fields) {
       return sendJson(res, 200, {
-        ok: true, fallback: true, fields: localIdeate(idea, genre),
+        ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre),
         note: "모델 응답을 JSON으로 파싱하지 못해 폴백을 사용했습니다.",
       });
     }
     return sendJson(res, 200, { ok: true, fields });
   } catch (err) {
     return sendJson(res, 200, {
-      ok: true, fallback: true, fields: localIdeate(idea, genre),
+      ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre),
       note: err?.message || "생성 실패로 폴백을 사용했습니다.",
     });
   }
@@ -389,10 +418,12 @@ async function handleApi(req, res, pathname) {
   if (req.method === "GET" && pathname === "/api/playbook") {
     const query = new URL(req.url, "http://localhost").searchParams;
     const genre = query.get("genre") || "aiForesight";
+    const subgenre = query.get("subgenre") || "";
     return sendJson(res, 200, {
       ok: true,
       genre,
-      playbook: getPlaybook(genre),
+      subgenre,
+      playbook: getPlaybook(genre, subgenre),
       common: {
         hitStages: COMMON.hitStages,
         designPrinciple: COMMON.designPrinciple,
@@ -430,6 +461,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/critique") {
     return handleCritique(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/audit") {
+    return handleAudit(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/run") {

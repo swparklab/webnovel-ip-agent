@@ -38,7 +38,7 @@ const FIELD_LABELS = {
 };
 
 const SELECTORS = [
-  "ipTitle", "genre", "platform", "targetReader", "logline", "futureYear",
+  "ipTitle", "genre", "subgenre", "platform", "targetReader", "logline", "futureYear",
   "cadence", "sfPremise", "coreTech", "scienceConstraint", "socialShift",
   "protagonist", "desire", "aiEntity", "antagonist", "worldRule", "seasonGoal",
   "tone", "manuscript", "feedback", "webtoonBranch", "globalBranch",
@@ -90,7 +90,7 @@ const DEFAULTS = Object.fromEntries(
 Object.assign(DEFAULTS, { genre: "aiForesight", platform: "kakao", cadence: "daily", futureYear: "2041" });
 ["ipTitle", "targetReader", "logline", "sfPremise", "coreTech", "scienceConstraint",
  "socialShift", "protagonist", "desire", "aiEntity", "antagonist", "worldRule",
- "seasonGoal", "tone", "manuscript", "feedback", "coreTags"].forEach((id) => (DEFAULTS[id] = ""));
+ "seasonGoal", "tone", "manuscript", "feedback", "coreTags", "subgenre"].forEach((id) => (DEFAULTS[id] = ""));
 DEFAULTS.commerceBranch = false;
 
 /* ------------------------------- App state ------------------------------ */
@@ -113,6 +113,8 @@ const state = {
   noteDraft: {},         // n -> 사용자 의견 임시값
   autoFeedback: false,   // 생성 후 자동 자체 피드백
   autoFinalPass: true,   // 전자동에서 마지막에 전체 보완 1회
+  audit: null,           // 완성도 심사 결과
+  auditBusy: false,
   lastRunChapters: [],   // 이번 실행에서 새로 생성한 화 번호
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
@@ -165,12 +167,36 @@ function applyPreset(preset) {
   if (preset.ipTitle) el("workspaceTitle").textContent = preset.ipTitle;
 }
 
+// 세부 장르 드롭다운을 현재 메인 장르에 맞게 채운다(복원값 dataset.want 우선).
+function populateSubgenres(data) {
+  const sel = el("subgenre");
+  if (!sel) return;
+  const subs = data?.playbook?.subgenres || [];
+  const want = sel.dataset.want || sel.value || "";
+  sel.innerHTML = `<option value="">(세부 장르 자동 — 메인 장르 기본)</option>` +
+    subs.map((s) => `<option value="${s.key}">${escapeHtml(s.label)}</option>`).join("");
+  sel.value = subs.some((s) => s.key === want) ? want : "";
+  delete sel.dataset.want;
+  renderSubgenreFormula(data);
+}
+
+function renderSubgenreFormula(data) {
+  const hint = el("subgenreFormula");
+  if (!hint) return;
+  const subs = data?.playbook?.subgenres || [];
+  const s = subs.find((x) => x.key === el("subgenre").value);
+  hint.innerHTML = s
+    ? `성공 방정식: <strong>${escapeHtml(s.formula)}</strong>`
+    : (data?.playbook?.formula ? `성공 방정식(메인): ${escapeHtml(data.playbook.formula)}` : "");
+}
+
 // 장르 변경 시: 적응형 라벨 적용 + (옵션) 기본 예시 프리셋 자동 채움
 async function onGenreChange(fillPreset) {
   const genre = el("genre").value;
   const data = await ensurePlaybook(genre);
   const family = data?.playbook?.family || "general";
   applyGenreLabels(family);
+  populateSubgenres(data);
   if (fillPreset) {
     applyPreset(data?.playbook?.preset);
     localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
@@ -285,6 +311,9 @@ function fillForm(data) {
       if (node) node.checked = set.has(node.dataset.platform);
     });
   }
+  // 세부 장르는 옵션이 아직 채워지기 전이라, 복원값을 dataset.want에 보관(populateSubgenres가 적용).
+  const sg = el("subgenre");
+  if (sg && "subgenre" in data) sg.dataset.want = data.subgenre || "";
   state.references = Array.isArray(data._references) ? data._references : [];
   renderRefList();
 }
@@ -385,11 +414,18 @@ function playbookHtml(genre, data) {
   if (!data) return "";
   const p = data.playbook;
   const c = data.common;
+  const subs = p.subgenres || [];
+  const selKey = el("subgenre")?.value || "";
+  const selSub = subs.find((s) => s.key === selKey);
   const md = [
-    `## 적용 중인 흥행 문법 — ${p.label}`,
+    `## 적용 중인 흥행 문법 — ${p.label}${selSub ? ` ▸ ${selSub.label}` : ""}`,
     `- 장르 핵심: ${p.core}`,
-    `- 흥행 공식: ${p.formula}`,
-    `- 핵심 보상: ${p.reward}`,
+    `- 성공 방정식: **${selSub ? selSub.formula : p.formula}**`,
+    `- 핵심 보상: ${selSub && selSub.reward ? selSub.reward : p.reward}`,
+    subs.length ? "" : null,
+    subs.length ? "### 세부 장르 성공 방정식 (선택 가능)" : null,
+    ...(subs.length ? subs.map((s) => `- ${s.key === selKey ? "**▶ " : ""}${s.label}: ${s.formula}${s.key === selKey ? "**" : ""}`) : []),
+    subs.length ? "" : null,
     `- 설계 원칙: **${c.designPrinciple}**`,
     `- 5단계 구조: ${c.hitStages.join(" → ")}`,
     "",
@@ -405,7 +441,7 @@ function playbookHtml(genre, data) {
     "",
     "### 제목 문법",
     ...p.titles.map((t) => `- ${t}`),
-  ].join("\n");
+  ].filter((x) => x !== null && x !== undefined).join("\n");
   return window.renderMarkdown(md);
 }
 
@@ -710,6 +746,122 @@ function downloadNovel() {
   toast(`최종 소설(${nums.length}화)을 다운로드했습니다.`, "success");
 }
 
+/* --------------------------- 완성도 심사 -------------------------------- */
+
+// 심사용 발췌(digest): 작품개요 + 각 회차 도입부/마무리. (전문은 너무 길어 발췌)
+function buildAuditDigest() {
+  const map = chapterMap();
+  const nums = chapterNumbers(map);
+  const src = state.buffers.world || state.buffers.plot || "";
+  const oi = src.indexOf("## 작품개요");
+  const parts = [];
+  if (oi >= 0) parts.push(`### 작품개요\n${src.slice(oi, oi + 1200)}`);
+  nums.forEach((n) => {
+    const t = String(map[n] || "");
+    const head = t.slice(0, 700);
+    const tail = t.length > 1100 ? `\n…(중략)…\n${t.slice(-320)}` : "";
+    parts.push(`### ${n}화 발췌\n${head}${tail}`);
+  });
+  return parts.join("\n\n").slice(0, 38000);
+}
+
+async function runAudit() {
+  if (state.chapterRunning || state.running) return;
+  if (!chapterNumbers().length) { toast("심사할 원고가 없습니다. 먼저 회차를 생성하세요.", "warn"); return; }
+  state.chapterRunning = true;
+  state.auditBusy = true;
+  state.chapterController = new AbortController();
+  renderDraftStudio(el("outputPanel"));
+  try {
+    el("runStatus").textContent = "완성도 심사 중";
+    const res = await fetch("/api/audit", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: collectInput(), model: el("modelSelect").value, digest: buildAuditDigest() }),
+    });
+    const data = await res.json();
+    if (!data.ok || !data.audit) throw new Error(data.error || "심사 실패");
+    state.audit = data.audit;
+    el("runStatus").textContent = "완성도 심사 완료";
+    toast(`완성도 심사: ${data.audit.overall}/100${data.audit.fallback ? " (폴백)" : ""}`, "success");
+  } catch (err) {
+    el("runStatus").textContent = "오류";
+    toast(err.message || "심사 실패", "error");
+  } finally {
+    state.auditBusy = false;
+    state.chapterRunning = false;
+    state.chapterController = null;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+function auditPanelHtml() {
+  const a = state.audit;
+  if (state.auditBusy && !a) {
+    return `<div class="audit-panel"><div class="audit-head">📋 완성도 심사 진행 중…</div></div>`;
+  }
+  if (!a) return "";
+  const dims = Object.entries(a.dimensions || {}).map(([k, v]) =>
+    `<span class="audit-dim"><b>${k}</b> ${v}</span>`).join("");
+  const list = (arr, cls) => (arr && arr.length)
+    ? `<ul class="audit-${cls}">${arr.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "<p class='audit-none'>—</p>";
+  const fatal = (a.fatalWeaknesses || []).length
+    ? `<ul class="audit-fatal">${a.fatalWeaknesses.map((w) =>
+      `<li><b>${escapeHtml(w.issue)}</b>${w.chapters?.length ? ` <em>(${w.chapters.join(",")}화)</em>` : ""} — ${escapeHtml(w.why || "")}</li>`).join("")}</ul>`
+    : "<p class='audit-none'>—</p>";
+  const hasTargets = (a.fatalWeaknesses || []).some((w) => w.chapters && w.chapters.length);
+  return `<div class="audit-panel${a.fallback ? " fallback" : ""}">
+    <div class="audit-head">📋 완성도 심사 <strong>${a.overall}/100</strong> <span class="audit-grade">${escapeHtml(a.grade || "")}</span></div>
+    <div class="audit-dims">${dims}</div>
+    <div class="audit-verdict">“${escapeHtml(a.verdict || "")}”</div>
+    <div class="crit-label">치명적 약점 (레드팀: 왜 떨어지나)</div>${fatal}
+    ${a.cliches?.length ? `<div class="crit-label warn">기시감/클리셰</div>${list(a.cliches, "bad")}` : ""}
+    ${a.inconsistencies?.length ? `<div class="crit-label warn">연속성·설정 오류</div>${list(a.inconsistencies, "bad")}` : ""}
+    <div class="crit-label">강점</div>${list(a.strengths, "good")}
+    <div class="crit-label">완성도 보강 로드맵</div>${list(a.revisionPlan, "fix")}
+    <div class="audit-actions">
+      <button class="mini primary" id="auditRevise" type="button" ${hasTargets ? "" : "disabled"} title="${hasTargets ? "심사가 지목한 회차를 완성도 기준으로 보강 재집필" : "지목된 회차가 없습니다"}">⚑ 약점 회차 보강</button>
+      <button class="mini" id="auditClose" type="button">심사 닫기</button>
+    </div>
+  </div>`;
+}
+
+// 심사가 지목한 회차들을 '완성도(literary)' 모드로 보강 재집필.
+async function reviseFromAudit() {
+  const a = state.audit;
+  if (!a || state.chapterRunning || state.running) return;
+  const byChapter = {};
+  (a.fatalWeaknesses || []).forEach((w) => (w.chapters || []).forEach((n) => {
+    (byChapter[n] = byChapter[n] || []).push(`${w.issue}: ${w.why}`);
+  }));
+  const targets = Object.keys(byChapter).map(Number).filter((n) => chapterMap()[n]).sort((x, y) => x - y);
+  if (!targets.length) { toast("심사가 지목한 보강 회차가 없습니다.", "warn"); return; }
+  if (!confirm(`심사가 지목한 ${targets.length}개 회차(${targets.join(",")})를 '완성도' 기준으로 보강 재집필합니다.\n흥행 사이다가 아니라 문장·개연성·독창성을 끌어올립니다. 진행할까요?`)) return;
+  state.chapterRunning = true;
+  state.chapterController = new AbortController();
+  renderDraftStudio(el("outputPanel"));
+  const plan = (a.revisionPlan || []).slice(0, 4).join(" / ");
+  try {
+    let done = 0;
+    for (const n of targets) {
+      if (state.chapterController.signal.aborted) break;
+      const note = `[완성도 보강] 다음 약점을 반드시 해소하라:\n- ${byChapter[n].join("\n- ")}\n전체 보강 방향: ${plan}`;
+      state.streamingChapter = n;
+      el("runStatus").textContent = `심사 보강 ${++done}/${targets.length} — ${n}화`;
+      await streamChapterRequest(n, 1, { revise: { note, original: chapterMap()[n], mode: "literary" } });
+    }
+    el("runStatus").textContent = "심사 보강 완료";
+    toast(`완성도 보강 완료 (${done}화). 다시 심사로 개선을 확인하세요.`, "success");
+  } catch (err) {
+    if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("보강을 중단했습니다.", "warn"); }
+    else { el("runStatus").textContent = "오류"; toast(err.message || "보강 실패", "error"); }
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    state.streamingChapter = null;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
 /* --------------------------- 연속 원고 스튜디오 -------------------------- */
 
 const MAX_CHAPTER = 60; // 하드 안전 상한. 실제 결말 지점은 state.totalChapters(시즌 길이).
@@ -770,6 +922,7 @@ function draftStudioHtml() {
       ${canMore && !state.chapterRunning ? `<button class="command primary" id="autopilot" type="button" title="${next}~${target}화를 [생성→피드백→보완] 자동 반복 후 마무리 전체보완"><span>🤖 전자동 (~${target}화)</span></button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="critiqueAll" type="button" title="모든 회차에 자체 피드백을 한번에 생성">🔍 전체 피드백</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini primary" id="reviseAll" type="button" title="모든 회차를 각자의 피드백대로 한번에 보완">✦ 전체 보완</button>` : ""}
+      ${nums.length && !state.chapterRunning ? `<button class="mini" id="auditBtn" type="button" title="작품 완성도를 공모전 본심 기준으로 심사(흥행 잣대 아님)">📋 완성도 심사</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="novelDownload" type="button" title="생성된 회차를 하나의 소설 파일로 다운로드">⬇ 소설 다운로드</button>` : ""}
       ${maxCh > 1 && !state.chapterRunning ? `<button class="mini danger" id="chapterReset" type="button" title="2화 이후 생성 원고 삭제">원고 초기화</button>` : ""}
     </div>`;
@@ -806,7 +959,7 @@ function draftStudioHtml() {
       return `<article class="chapter-block">${tag}${md}${actions}${critBlock}${noteBlock}</article>`;
     }).join('<hr class="chapter-sep" />');
   }
-  return `<div class="chapter-studio">${controls}<div id="chapterList">${body}</div></div>`;
+  return `<div class="chapter-studio">${controls}${auditPanelHtml()}<div id="chapterList">${body}</div></div>`;
 }
 
 function critiqueHtml(n, c) {
@@ -876,6 +1029,12 @@ function renderDraftStudio(panel) {
   if (cAll) cAll.addEventListener("click", critiqueAll);
   const rAll = el("reviseAll");
   if (rAll) rAll.addEventListener("click", reviseAll);
+  const aBtn = el("auditBtn");
+  if (aBtn) aBtn.addEventListener("click", runAudit);
+  const aRev = el("auditRevise");
+  if (aRev) aRev.addEventListener("click", reviseFromAudit);
+  const aClose = el("auditClose");
+  if (aClose) aClose.addEventListener("click", () => { state.audit = null; renderDraftStudio(panel); });
 
   // 회차별 피드백/수정 액션 (이벤트 위임)
   panel.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", onChapterAction));
@@ -1249,7 +1408,7 @@ async function ideateFill() {
     const res = await fetch("/api/ideate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea, genre: el("genre").value, model: el("modelSelect").value }),
+      body: JSON.stringify({ idea, genre: el("genre").value, subgenre: el("subgenre").value, model: el("modelSelect").value }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "기획 생성 실패");
@@ -1510,6 +1669,13 @@ function boot() {
     btn.addEventListener("click", () => setStudio(btn.dataset.studio)));
   // 장르 변경(사용자 선택): 적응형 라벨 + 기본 예시 자동 채움
   el("genre").addEventListener("change", () => onGenreChange(true));
+  // 세부 장르 변경: 성공 방정식 표시 갱신 + 저장
+  el("subgenre").addEventListener("change", () => {
+    renderSubgenreFormula(state.playbookCache[el("genre").value]);
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = "수정됨";
+    if (state.activeTab === "prompts") renderActiveTab();
+  });
   el("agentForm").addEventListener("input", () => {
     el("runStatus").textContent = "수정됨";
     if (state.activeTab === "prompts") renderActiveTab();

@@ -303,3 +303,25 @@ textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 
 .crit-delta.up { color: var(--green); border-color: var(--green); background: #e3f4ee; }
 .crit-delta.down { color: var(--rose); border-color: var(--rose); background: #fdecec; }
 .crit-label.warn { color: var(--rose); }
+
+/* ----- 완성도 심사 패널 ----- */
+.audit-panel {
+  margin: 4px 0 12px; padding: 14px 16px; border-radius: 10px;
+  background: var(--surface); border: 1px solid var(--green); border-left: 4px solid var(--green);
+  font-size: 0.86rem;
+}
+.audit-panel.fallback { border-color: var(--amber); border-left-color: var(--amber); }
+.audit-head { font-weight: 800; font-size: 1rem; }
+.audit-head strong { color: var(--green); font-size: 1.15rem; margin-left: 4px; }
+.audit-grade { font-weight: 700; font-size: 0.8rem; color: var(--muted); margin-left: 8px; }
+.audit-dims { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.audit-dim { font-size: 0.76rem; background: var(--surface-2); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 9px; }
+.audit-dim b { color: var(--green); }
+.audit-verdict { font-style: italic; color: var(--ink); margin: 6px 0 4px; }
+.audit-panel ul { margin: 2px 0 0; padding-left: 18px; }
+.audit-panel li { margin: 3px 0; line-height: 1.55; }
+.audit-fatal li { color: var(--rose); }
+.audit-fatal em, .audit-panel em { color: var(--muted); font-style: normal; font-weight: 700; }
+.audit-good li { color: var(--ink); }
+.audit-none { color: var(--muted); margin: 2px 0; }
+.audit-actions { display: flex; gap: 6px; margin-top: 10px; }
