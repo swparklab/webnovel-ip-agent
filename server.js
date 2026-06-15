@@ -262,14 +262,16 @@ async function handleIdeate(req, res) {
   }
 }
 
-// 연속 회차 집필: 1화→…→최대 10화. fromChapter부터 count개를 직전 화에 이어 SSE 스트리밍.
+// 연속 회차 집필: fromChapter부터 count개를 직전 화에 이어 SSE 스트리밍. total=시즌 길이(결말 지점).
 async function handleChapter(req, res) {
   const payload = await readJson(req);
   const input = payload.input || {};
   const model = payload.model || config.defaultModel;
+  const total = Math.max(1, Math.min(MAX_CHAPTER, Number(payload.total) || 25));
   const from = Math.max(1, Math.min(MAX_CHAPTER, Number(payload.fromChapter) || 1));
-  const count = Math.max(1, Math.min(5, Number(payload.count) || 1));
-  const end = Math.min(MAX_CHAPTER, from + count - 1);
+  const count = Math.max(1, Math.min(8, Number(payload.count) || 1));
+  // 결말(total)을 넘지 않게 한다.
+  const end = Math.min(MAX_CHAPTER, total, from + count - 1);
   const ctx = payload.ctx || {};
   let prevText = String(payload.prevText || "");
 
@@ -307,30 +309,31 @@ async function handleChapter(req, res) {
     };
 
     for (let n = from; n <= end; n++) {
-      emit("chapter-start", { n });
+      const isFinale = n >= total;
+      emit("chapter-start", { n, isFinale });
       if (mode === "local") {
-        const text = localChapter(input, n, prevText);
+        const text = localChapter(input, n, prevText, isFinale);
         emit("chapter-delta", { n, text });
-        emit("chapter-done", { n, chars: text.length });
+        emit("chapter-done", { n, chars: text.length, isFinale });
         prevText = text;
         continue;
       }
-      const p1 = buildChapterFirstPrompt({ input, n, prevText, ctx });
+      const p1 = buildChapterFirstPrompt({ input, n, prevText, ctx, total });
       p1._n = n;
       const first = await genPart(p1);
       if (controller.signal.aborted) break;
 
       emit("chapter-delta", { n, text: "\n\n" });
-      const p2 = buildChapterSecondPrompt({ input, n, prevText, ctx, firstText: first });
+      const p2 = buildChapterSecondPrompt({ input, n, prevText, ctx, firstText: first, total, isFinale });
       p2._n = n;
       const second = await genPart(p2);
 
       const full = `${first}\n\n${second}`;
       prevText = full;
-      emit("chapter-done", { n, chars: full.length });
+      emit("chapter-done", { n, chars: full.length, isFinale });
       if (controller.signal.aborted) break;
     }
-    emit("done", { from, end });
+    emit("done", { from, end, total });
   } catch (err) {
     if (err?.name !== "AbortError") emit("error", { message: err?.message || "원고 생성 오류" });
   } finally {

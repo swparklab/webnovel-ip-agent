@@ -105,6 +105,7 @@ const state = {
   chapterController: null,
   streamingChapter: null,
   batchSize: 1,          // 한번에 생성할 화 수 (1 또는 5)
+  totalChapters: 25,     // 시즌 길이(결말 지점)
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
   errors: {},
@@ -703,7 +704,8 @@ function downloadNovel() {
 
 /* --------------------------- 연속 원고 스튜디오 -------------------------- */
 
-const MAX_CHAPTER = 10;
+const MAX_CHAPTER = 60; // 하드 안전 상한. 실제 결말 지점은 state.totalChapters(시즌 길이).
+const SEASON_OPTIONS = [10, 15, 20, 25, 30, 40];
 
 // 1화는 파이프라인 Draft 산출물이 기본 소스. 생성된 회차(state.chapters)가 있으면 덮어쓴다.
 function chapterMap() {
@@ -721,23 +723,33 @@ function draftStudioHtml() {
   const map = chapterMap();
   const nums = chapterNumbers(map);
   const maxCh = nums.length ? Math.max(...nums) : 0;
+  const target = state.totalChapters;
   const next = maxCh + 1;
-  const canMore = maxCh < MAX_CHAPTER;
-  const willGen = Math.min(state.batchSize, MAX_CHAPTER - maxCh);
+  const canMore = maxCh < target;
+  const willGen = Math.min(state.batchSize, target - maxCh);
 
-  const action = state.chapterRunning
-    ? `<button class="command ghost" id="chapterStop" type="button">중단</button>`
-    : canMore
-      ? `<button class="command primary chapter-gen" id="chapterGen" type="button"><span class="dot"></span><span>다음 ${willGen}화 생성 (${next}~${maxCh + willGen}화)</span></button>`
-      : `<span class="chapter-complete">10화까지 완성 ✓</span>`;
+  let action;
+  if (state.chapterRunning) {
+    action = `<button class="command ghost" id="chapterStop" type="button">중단</button>`;
+  } else if (canMore) {
+    action = `<button class="command primary chapter-gen" id="chapterGen" type="button"><span class="dot"></span><span>다음 ${willGen}화 (${next}~${maxCh + willGen})</span></button>
+      <button class="command primary" id="chapterToEnd" type="button" title="결말(${target}화)까지 자동으로 이어서 생성"><span>🏁 끝까지 생성 (~${target}화)</span></button>`;
+  } else {
+    action = `<span class="chapter-complete">결말 ${target}화까지 완성 ✓</span>`;
+  }
 
   const controls = `
     <div class="chapter-bar">
-      <span class="chapter-count">원고 <strong>${maxCh}</strong> / ${MAX_CHAPTER}화</span>
+      <span class="chapter-count">원고 <strong>${maxCh}</strong> / ${target}화</span>
       <label class="chapter-batch">한번에
         <select id="chapterBatch" ${state.chapterRunning ? "disabled" : ""}>
           <option value="1"${state.batchSize === 1 ? " selected" : ""}>1화씩</option>
           <option value="5"${state.batchSize === 5 ? " selected" : ""}>5화씩</option>
+        </select>
+      </label>
+      <label class="chapter-batch">결말
+        <select id="seasonLen" ${state.chapterRunning ? "disabled" : ""}>
+          ${SEASON_OPTIONS.map((v) => `<option value="${v}"${target === v ? " selected" : ""}>${v}화</option>`).join("")}
         </select>
       </label>
       ${action}
@@ -769,6 +781,14 @@ function renderDraftStudio(panel) {
   });
   const gen = el("chapterGen");
   if (gen) gen.addEventListener("click", generateChapters);
+  const toEnd = el("chapterToEnd");
+  if (toEnd) toEnd.addEventListener("click", generateToEnd);
+  const season = el("seasonLen");
+  if (season) season.addEventListener("change", () => {
+    state.totalChapters = Number(season.value) || 25;
+    localStorage.setItem("sfSeasonLen", String(state.totalChapters));
+    renderDraftStudio(panel);
+  });
   const stop = el("chapterStop");
   if (stop) stop.addEventListener("click", () => { if (state.chapterController) state.chapterController.abort(); });
   const reset = el("chapterReset");
@@ -785,67 +805,80 @@ function resetChapters() {
   if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
 }
 
-async function generateChapters() {
-  if (state.chapterRunning || state.running) return;
-  const map = chapterMap();
-  const nums = chapterNumbers(map);
-  const maxCh = nums.length ? Math.max(...nums) : 0;
-  const from = maxCh + 1;
-  if (from > MAX_CHAPTER) { toast("이미 10화까지 생성했습니다.", "warn"); return; }
-  const count = Math.min(state.batchSize, MAX_CHAPTER - maxCh);
-  const prevText = maxCh >= 1 ? map[maxCh] : "";
+function currentMaxChapter() {
+  const nums = chapterNumbers();
+  return nums.length ? Math.max(...nums) : 0;
+}
+
+// 한 번의 /api/chapter 요청(여러 화 배치)을 스트리밍 처리. running 상태는 호출부가 관리한다.
+async function streamChapterRequest(from, count) {
+  const prevText = from > 1 ? (chapterMap()[from - 1] || "") : "";
   const input = collectInput();
   const model = el("modelSelect").value || state.config.defaultModel;
-
-  state.chapterRunning = true;
-  state.streamingChapter = from;
-  el("runStatus").textContent = `원고 생성 중 (${from}~${from + count - 1}화)`;
-  const controller = new AbortController();
-  state.chapterController = controller;
-  renderDraftStudio(el("outputPanel"));
-
-  try {
-    const res = await fetch("/api/chapter", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        input, model, fromChapter: from, count, prevText,
-        ctx: { foresight: state.buffers.foresight, world: state.buffers.world, plot: state.buffers.plot },
-      }),
-      signal: controller.signal,
-    });
-    if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buf = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep;
-      while ((sep = buf.indexOf("\n\n")) !== -1) {
-        const raw = buf.slice(0, sep);
-        buf = buf.slice(sep + 2);
-        let type = "message"; let dataLine = "";
-        raw.split("\n").forEach((line) => {
-          if (line.startsWith("event:")) type = line.slice(6).trim();
-          else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
-        });
-        if (!dataLine) continue;
-        let d; try { d = JSON.parse(dataLine); } catch { continue; }
-        if (type === "chapter-start") {
-          state.streamingChapter = d.n;
-          state.chapters[d.n] = "";
-        } else if (type === "chapter-delta") {
-          state.chapters[d.n] = (state.chapters[d.n] || "") + d.text;
-          if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
-        } else if (type === "error") {
-          toast(d.message || "원고 생성 오류", "error");
-        }
+  const res = await fetch("/api/chapter", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input, model, fromChapter: from, count, total: state.totalChapters, prevText,
+      ctx: { foresight: state.buffers.foresight, world: state.buffers.world, plot: state.buffers.plot },
+    }),
+    signal: state.chapterController.signal,
+  });
+  if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buf.indexOf("\n\n")) !== -1) {
+      const raw = buf.slice(0, sep);
+      buf = buf.slice(sep + 2);
+      let type = "message"; let dataLine = "";
+      raw.split("\n").forEach((line) => {
+        if (line.startsWith("event:")) type = line.slice(6).trim();
+        else if (line.startsWith("data:")) dataLine += line.slice(5).trim();
+      });
+      if (!dataLine) continue;
+      let d; try { d = JSON.parse(dataLine); } catch { continue; }
+      if (type === "chapter-start") {
+        state.streamingChapter = d.n;
+        state.chapters[d.n] = "";
+      } else if (type === "chapter-delta") {
+        state.chapters[d.n] = (state.chapters[d.n] || "") + d.text;
+        if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+      } else if (type === "error") {
+        toast(d.message || "원고 생성 오류", "error");
       }
     }
-    el("runStatus").textContent = "원고 완료";
-    toast("원고를 생성했습니다.", "success");
+  }
+}
+
+// 공통 실행 루프. toEnd=true면 결말(total)에 도달할 때까지 배치를 자동 반복한다.
+async function runChapterLoop(from, toEnd) {
+  if (state.chapterRunning || state.running) return;
+  if (from > state.totalChapters) { toast(`이미 결말(${state.totalChapters}화)까지 생성했습니다.`, "warn"); return; }
+  state.chapterRunning = true;
+  state.streamingChapter = from;
+  state.chapterController = new AbortController();
+  renderDraftStudio(el("outputPanel"));
+  try {
+    let cursor = from;
+    for (;;) {
+      const batch = Math.min(state.batchSize || 1, state.totalChapters - cursor + 1);
+      if (batch <= 0) break;
+      el("runStatus").textContent = `원고 생성 중 (${cursor}~${cursor + batch - 1}/${state.totalChapters}화)`;
+      await streamChapterRequest(cursor, batch);
+      if (state.chapterController.signal.aborted) break;
+      const maxCh = currentMaxChapter();
+      if (!toEnd || maxCh >= state.totalChapters) break;
+      cursor = maxCh + 1;
+    }
+    const reached = currentMaxChapter() >= state.totalChapters;
+    el("runStatus").textContent = reached ? "결말까지 완성" : "원고 완료";
+    toast(reached ? `결말(${state.totalChapters}화)까지 완성했습니다.` : "원고를 생성했습니다.", "success");
   } catch (err) {
     if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("원고 생성을 중단했습니다.", "warn"); }
     else { el("runStatus").textContent = "오류"; toast(err.message || "원고 생성 실패", "error"); }
@@ -856,6 +889,12 @@ async function generateChapters() {
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
   }
 }
+
+// 다음 배치(state.batchSize) 1회만 생성.
+function generateChapters() { return runChapterLoop(currentMaxChapter() + 1, false); }
+
+// 결말(total)까지 자동 반복 생성.
+function generateToEnd() { return runChapterLoop(currentMaxChapter() + 1, true); }
 
 /* --------------------------- 기획 아키텍트 ------------------------------ */
 
@@ -1106,6 +1145,8 @@ async function loadConfig() {
 function boot() {
   const savedBatch = Number(localStorage.getItem("sfChapterBatch"));
   if (savedBatch === 1 || savedBatch === 5) state.batchSize = savedBatch;
+  const savedSeason = Number(localStorage.getItem("sfSeasonLen"));
+  if (SEASON_OPTIONS.includes(savedSeason)) state.totalChapters = savedSeason;
   renderAgentGrid();
   renderTabs();
 
