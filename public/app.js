@@ -106,7 +106,8 @@ const state = {
   streamingChapter: null,
   batchSize: 1,          // 한번에 생성할 화 수 (1 또는 5)
   totalChapters: 25,     // 시즌 길이(결말 지점)
-  critiques: {},         // n -> 자체 피드백 결과
+  critiques: {},         // n -> 자체 피드백 결과 (현재/after)
+  critiqueBefore: {},    // n -> 보완 전 피드백 (before/after 비교용)
   critiqueBusy: {},      // n -> 피드백 생성 중 여부
   noteOpen: {},          // n -> 사용자 의견 입력창 열림
   noteDraft: {},         // n -> 사용자 의견 임시값
@@ -762,6 +763,8 @@ function draftStudioHtml() {
         <input type="checkbox" id="autoFeedback" ${state.autoFeedback ? "checked" : ""} ${state.chapterRunning ? "disabled" : ""} /> 자동 피드백
       </label>
       ${action}
+      ${nums.length && !state.chapterRunning ? `<button class="mini" id="critiqueAll" type="button" title="모든 회차에 자체 피드백을 한번에 생성">🔍 전체 피드백</button>` : ""}
+      ${nums.length && !state.chapterRunning ? `<button class="mini primary" id="reviseAll" type="button" title="모든 회차를 각자의 피드백대로 한번에 보완">✦ 전체 보완</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="novelDownload" type="button" title="생성된 회차를 하나의 소설 파일로 다운로드">⬇ 소설 다운로드</button>` : ""}
       ${maxCh > 1 && !state.chapterRunning ? `<button class="mini danger" id="chapterReset" type="button" title="2화 이후 생성 원고 삭제">원고 초기화</button>` : ""}
     </div>`;
@@ -775,24 +778,27 @@ function draftStudioHtml() {
       const cursor = streaming ? '<span class="cursor"></span>' : "";
       const tag = streaming ? `<span class="chapter-tag">생성 중…</span>` : "";
       const md = `<div class="md-output manuscript">${window.renderMarkdown(map[n])}${cursor}</div>`;
-      // 회차별 피드백/수정 액션 (생성 중이 아닐 때만)
-      let panel = "";
+      const crit = state.critiques[n];
+      const busy = state.critiqueBusy[n];
+      // 피드백은 배치 작업 중에도 실시간으로 보여준다.
+      const critBlock = crit
+        ? critiqueHtml(n, crit)
+        : (busy ? `<div class="chapter-critique"><div class="crit-head">자체 피드백 생성 중…</div></div>` : "");
+      // 액션 버튼/의견창은 작업 중이 아닐 때만.
+      let actions = "";
+      let noteBlock = "";
       if (!state.chapterRunning) {
-        const busy = state.critiqueBusy[n];
-        const crit = state.critiques[n];
-        const noteOpen = state.noteOpen[n];
-        panel = `<div class="chapter-actions">
+        actions = `<div class="chapter-actions">
           <button class="mini" data-act="critique" data-n="${n}" ${busy ? "disabled" : ""}>${busy ? "피드백 생성 중…" : crit ? "🔄 다시 피드백" : "🔍 자체 피드백"}</button>
           ${crit ? `<button class="mini primary" data-act="apply" data-n="${n}">✦ 피드백 반영 보완</button>` : ""}
           <button class="mini" data-act="note" data-n="${n}">✎ 내 의견으로 수정</button>
-        </div>
-        ${crit ? critiqueHtml(n, crit) : ""}
-        ${noteOpen ? `<div class="chapter-note">
-          <textarea data-note="${n}" placeholder="이 회차를 어떻게 고칠지 적어주세요. 예: 2화 중반 추격을 더 길게, 주인공을 더 능동적으로, 마지막 절단을 더 세게">${escapeHtml(state.noteDraft[n] || "")}</textarea>
+        </div>`;
+        noteBlock = state.noteOpen[n] ? `<div class="chapter-note">
+          <textarea data-note="${n}" placeholder="이 회차를 어떻게 고칠지 적어주세요. 예: 중반 추격을 더 길게, 주인공을 더 능동적으로, 마지막 절단을 더 세게">${escapeHtml(state.noteDraft[n] || "")}</textarea>
           <button class="mini primary" data-act="applynote" data-n="${n}">이 의견으로 수정</button>
-        </div>` : ""}`;
+        </div>` : "";
       }
-      return `<article class="chapter-block">${tag}${md}${panel}</article>`;
+      return `<article class="chapter-block">${tag}${md}${actions}${critBlock}${noteBlock}</article>`;
     }).join('<hr class="chapter-sep" />');
   }
   return `<div class="chapter-studio">${controls}<div id="chapterList">${body}</div></div>`;
@@ -802,11 +808,26 @@ function critiqueHtml(n, c) {
   const scores = Object.entries(c.scores || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
   const list = (arr, cls) => (arr && arr.length)
     ? `<ul class="crit-${cls}">${arr.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+  // 보완 전→후 비교 (하네스 결과)
+  const b = state.critiqueBefore[n];
+  let delta = "";
+  if (b && b !== c) {
+    const dO = (c.overall ?? 0) - (b.overall ?? 0);
+    const dF = (c.formulaFit ?? 0) - (b.formulaFit ?? 0);
+    const up = dO >= 0;
+    delta = `<div class="crit-delta ${up && dO > 0 ? "up" : dO < 0 ? "down" : ""}">
+      보완 전→후 · 종합 ${b.overall}→${c.overall} (${dO >= 0 ? "+" : ""}${dO}) · 공식충실 ${b.formulaFit ?? "-"}→${c.formulaFit ?? "-"} (${dF >= 0 ? "+" : ""}${dF})
+    </div>`;
+  }
   return `<div class="chapter-critique${c.fallback ? " fallback" : ""}">
-    <div class="crit-head">자체 피드백 <strong>${c.overall ?? "-"}/100</strong> <span class="crit-scores">${scores}</span></div>
+    <div class="crit-head">자체 피드백 <strong>${c.overall ?? "-"}/100</strong>
+      <span class="crit-fit">공식충실 ${c.formulaFit ?? "-"}/100</span>
+      <span class="crit-scores">${scores}</span></div>
+    ${delta}
+    ${c.violations?.length ? `<div class="crit-label warn">⚠ 공식/실패패턴 위반</div>${list(c.violations, "bad")}` : ""}
     ${c.strengths?.length ? `<div class="crit-label">강점</div>${list(c.strengths, "good")}` : ""}
     ${c.weaknesses?.length ? `<div class="crit-label">약점</div>${list(c.weaknesses, "bad")}` : ""}
-    ${c.fixes?.length ? `<div class="crit-label">수정 제안</div>${list(c.fixes, "fix")}` : ""}
+    ${c.fixes?.length ? `<div class="crit-label">수정 제안(공식·코어 기준)</div>${list(c.fixes, "fix")}` : ""}
   </div>`;
 }
 
@@ -839,6 +860,10 @@ function renderDraftStudio(panel) {
   if (reset) reset.addEventListener("click", resetChapters);
   const dl = el("novelDownload");
   if (dl) dl.addEventListener("click", downloadNovel);
+  const cAll = el("critiqueAll");
+  if (cAll) cAll.addEventListener("click", critiqueAll);
+  const rAll = el("reviseAll");
+  if (rAll) rAll.addEventListener("click", reviseAll);
 
   // 회차별 피드백/수정 액션 (이벤트 위임)
   panel.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", onChapterAction));
@@ -849,16 +874,8 @@ function renderDraftStudio(panel) {
 function onChapterAction(e) {
   const n = Number(e.currentTarget.dataset.n);
   const act = e.currentTarget.dataset.act;
-  if (act === "critique") { fetchCritique(n, false); return; }
-  if (act === "apply") {
-    const c = state.critiques[n];
-    const note = c && c.fixes && c.fixes.length
-      ? `다음 피드백을 반영해 개선하라:\n- ${c.fixes.join("\n- ")}${c.weaknesses?.length ? `\n(약점: ${c.weaknesses.join(" / ")})` : ""}`
-      : "";
-    if (!note) { toast("반영할 피드백이 없습니다. 먼저 자체 피드백을 생성하세요.", "warn"); return; }
-    reviseChapter(n, note);
-    return;
-  }
+  if (act === "critique") { delete state.critiqueBefore[n]; fetchCritique(n, false); return; }
+  if (act === "apply") { applyFeedback(n); return; }
   if (act === "note") {
     state.noteOpen[n] = !state.noteOpen[n];
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
@@ -1008,6 +1025,116 @@ async function fetchCritique(n, silent) {
     if (!silent) toast("피드백 생성 실패", "error");
   } finally {
     state.critiqueBusy[n] = false;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+// 전체 회차 한번에 자체 피드백.
+async function critiqueAll() {
+  if (state.chapterRunning || state.running) return;
+  const nums = chapterNumbers();
+  if (!nums.length) return;
+  state.chapterRunning = true;
+  state.chapterController = new AbortController();
+  renderDraftStudio(el("outputPanel"));
+  let done = 0;
+  try {
+    for (const n of nums) {
+      if (state.chapterController.signal.aborted) break;
+      el("runStatus").textContent = `전체 피드백 ${++done}/${nums.length}화`;
+      await fetchCritique(n, true);
+    }
+    el("runStatus").textContent = "전체 피드백 완료";
+    toast(`전체 피드백 완료 (${done}화)`, "success");
+  } catch {
+    el("runStatus").textContent = "오류";
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+// 피드백을 '하네스 수정 지침'으로 변환 (위반·약점·수정지시를 공식 기준으로 묶음).
+function fixesToNote(c) {
+  const parts = [];
+  if (c?.violations?.length) parts.push(`반드시 제거할 공식/실패패턴 위반: ${c.violations.join(" / ")}`);
+  if (c?.weaknesses?.length) parts.push(`고칠 약점: ${c.weaknesses.join(" / ")}`);
+  if (c?.fixes?.length) parts.push(`적용할 수정 지시:\n- ${c.fixes.join("\n- ")}`);
+  if (typeof c?.formulaFit === "number") parts.push(`현재 공식충실 ${c.formulaFit}/100 — 결핍→특권→검증→즉시보상(수치/지위/관계)→세계확장 한 사이클을 확실히 이행해 이 점수를 끌어올려라.`);
+  if (!parts.length) return "흥행 공식(결핍→특권→검증→즉시보상→세계확장)과 코어를 이 회차가 한 바퀴 이행하도록, 보상을 수치/지위/관계로 보이게 강화하라.";
+  return parts.join("\n");
+}
+
+// 하네스 보완 루프: before 평가 → 재집필 → after 재평가 → (개선 안 되면) 다시 조인다. 잠금은 호출부가 관리.
+async function harnessRefine(n, opts = {}) {
+  const maxAttempts = opts.maxAttempts || 2;
+  if (!state.critiques[n]) await fetchCritique(n, true);
+  const before = state.critiques[n];
+  if (!before) return;
+  state.critiqueBefore[n] = before;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (state.chapterController?.signal.aborted) return;
+    const basis = state.critiques[n] || before;
+    state.streamingChapter = n;
+    el("runStatus").textContent = `${n}화 보완 ${attempt}/${maxAttempts} (재집필)`;
+    await streamChapterRequest(n, 1, { revise: { note: fixesToNote(basis), original: chapterMap()[n] } });
+    if (state.chapterController?.signal.aborted) return;
+    el("runStatus").textContent = `${n}화 보완 후 재평가`;
+    await fetchCritique(n, true); // after — critiqueBefore[n]은 유지됨
+    const after = state.critiques[n];
+    if (after && after.overall > before.overall && (after.formulaFit ?? 0) >= (before.formulaFit ?? 0)) break; // 개선 확인 → 종료
+    // 개선 미흡 → 다음 시도에서 더 강하게 조인다(basis가 최신 after로 갱신됨).
+  }
+}
+
+// 단일 회차 '피드백 반영 보완' (하네스 2회까지).
+async function applyFeedback(n) {
+  if (state.chapterRunning || state.running) return;
+  state.chapterRunning = true;
+  state.chapterController = new AbortController();
+  renderDraftStudio(el("outputPanel"));
+  try {
+    await harnessRefine(n, { maxAttempts: 2 });
+    const b = state.critiqueBefore[n]?.overall, a = state.critiques[n]?.overall;
+    el("runStatus").textContent = "보완 완료";
+    toast(`${n}화 보완: 종합 ${b ?? "-"} → ${a ?? "-"}`, a > b ? "success" : "warn");
+  } catch (err) {
+    if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("보완을 중단했습니다.", "warn"); }
+    else { el("runStatus").textContent = "오류"; toast(err.message || "보완 실패", "error"); }
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    state.streamingChapter = null;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+// 전체 회차를 각자의 피드백대로 한번에 보완(1→마지막 순서, 앞 수정이 뒤로 이어짐).
+async function reviseAll() {
+  if (state.chapterRunning || state.running) return;
+  const nums = chapterNumbers();
+  if (!nums.length) return;
+  if (!confirm(`${nums.length}개 회차를 각자의 피드백(공식·코어 기준)에 따라 전체 보완합니다.\n회차마다 [평가→재집필→재평가] 하네스를 돌려 before→after를 남깁니다. 시간이 오래 걸립니다(중단 가능). 진행할까요?`)) return;
+  state.chapterRunning = true;
+  state.chapterController = new AbortController();
+  renderDraftStudio(el("outputPanel"));
+  let done = 0;
+  try {
+    for (const n of nums) {
+      if (state.chapterController.signal.aborted) break;
+      el("runStatus").textContent = `전체 보완 ${++done}/${nums.length} — ${n}화`;
+      await harnessRefine(n, { maxAttempts: 1 }); // 비용 고려: 회차당 1회 보완 + 재평가
+    }
+    el("runStatus").textContent = "전체 보완 완료";
+    toast(`전체 보완 완료 (${done}화)`, "success");
+  } catch (err) {
+    if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("전체 보완을 중단했습니다.", "warn"); }
+    else { el("runStatus").textContent = "오류"; toast(err.message || "전체 보완 실패", "error"); }
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
   }
 }

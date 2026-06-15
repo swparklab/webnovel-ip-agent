@@ -293,3 +293,13 @@ textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 
 .crit-fix li { color: var(--ink); }
 .chapter-note { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .chapter-note textarea { min-height: 64px; font-size: 0.85rem; }
+
+/* ----- 하네스 피드백: 공식충실 / before→after / 위반 ----- */
+.crit-fit { font-weight: 800; font-size: 0.76rem; color: var(--green); margin-left: 8px; }
+.crit-delta {
+  margin: 4px 0 2px; padding: 4px 8px; border-radius: 6px;
+  font-size: 0.78rem; font-weight: 800; background: var(--surface); border: 1px solid var(--line-strong); color: var(--muted);
+}
+.crit-delta.up { color: var(--green); border-color: var(--green); background: #e3f4ee; }
+.crit-delta.down { color: var(--rose); border-color: var(--rose); background: #fdecec; }
+.crit-label.warn { color: var(--rose); }
