@@ -273,3 +273,23 @@ textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 
 .ref-chip em { font-style: normal; color: var(--muted); font-weight: 600; }
 .ref-x { border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 0.8rem; padding: 0 2px; }
 .ref-x:hover { color: var(--rose); }
+
+/* ----- 회차 자체 피드백 / 수정 ----- */
+.chapter-auto { display: inline-flex; align-items: center; gap: 5px; font-size: 0.78rem; font-weight: 700; color: var(--muted); }
+.chapter-auto input { width: 15px; min-height: 15px; accent-color: var(--green); }
+.chapter-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chapter-critique {
+  margin-top: 10px; padding: 10px 12px; border: 1px solid var(--line-strong);
+  border-left: 3px solid var(--green); border-radius: 8px; background: var(--surface-2); font-size: 0.84rem;
+}
+.chapter-critique.fallback { border-left-color: var(--amber); }
+.crit-head { font-weight: 800; margin-bottom: 6px; }
+.crit-head strong { color: var(--green); }
+.crit-scores { font-weight: 600; color: var(--muted); font-size: 0.76rem; margin-left: 6px; }
+.crit-label { font-weight: 800; font-size: 0.76rem; color: var(--muted); margin-top: 6px; }
+.chapter-critique ul { margin: 2px 0 0; padding-left: 18px; }
+.chapter-critique li { margin: 2px 0; line-height: 1.5; }
+.crit-bad li { color: var(--rose); }
+.crit-fix li { color: var(--ink); }
+.chapter-note { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.chapter-note textarea { min-height: 64px; font-size: 0.85rem; }

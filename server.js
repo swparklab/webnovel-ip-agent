@@ -12,6 +12,7 @@ const {
   buildChapterFirstPrompt, buildChapterSecondPrompt, localChapter, MAX_CHAPTER,
 } = require("./lib/chapters");
 const { extractTextFromPdf } = require("./lib/pdf");
+const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/critique");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
@@ -224,6 +225,35 @@ async function handleReference(req, res) {
   });
 }
 
+// 회차 자체 피드백: 한 회차를 평가하고 수정 지시(JSON)를 반환. SSE 아님.
+async function handleCritique(req, res) {
+  const payload = await readJson(req);
+  const input = payload.input || {};
+  const n = Math.max(1, Number(payload.n) || 1);
+  const chapterText = String(payload.chapterText || "");
+  const model = payload.model || config.defaultModel;
+  const ctx = payload.ctx || {};
+  if (!chapterText.trim()) return sendJson(res, 400, { ok: false, error: "평가할 원고가 없습니다." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, n, critique: localCritique(input, n, chapterText) });
+  }
+  try {
+    const { system, user } = buildCritiquePrompt({ input, n, chapterText, ctx });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.4, maxTokens: 1500,
+    });
+    const critique = parseCritique(text);
+    if (!critique) return sendJson(res, 200, { ok: true, n, critique: localCritique(input, n, chapterText), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, n, critique });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, n, critique: localCritique(input, n, chapterText), note: err?.message });
+  }
+}
+
 // 기획 아키텍트: 아이디어 한 줄 → Core IP 폼 필드(JSON). SSE 아님(단발 응답).
 async function handleIdeate(req, res) {
   const payload = await readJson(req);
@@ -273,6 +303,7 @@ async function handleChapter(req, res) {
   // 결말(total)을 넘지 않게 한다.
   const end = Math.min(MAX_CHAPTER, total, from + count - 1);
   const ctx = payload.ctx || {};
+  const revise = payload.revise && payload.revise.note ? payload.revise : null;
   let prevText = String(payload.prevText || "");
 
   res.writeHead(200, {
@@ -318,13 +349,13 @@ async function handleChapter(req, res) {
         prevText = text;
         continue;
       }
-      const p1 = buildChapterFirstPrompt({ input, n, prevText, ctx, total });
+      const p1 = buildChapterFirstPrompt({ input, n, prevText, ctx, total, revise });
       p1._n = n;
       const first = await genPart(p1);
       if (controller.signal.aborted) break;
 
       emit("chapter-delta", { n, text: "\n\n" });
-      const p2 = buildChapterSecondPrompt({ input, n, prevText, ctx, firstText: first, total, isFinale });
+      const p2 = buildChapterSecondPrompt({ input, n, prevText, ctx, firstText: first, total, isFinale, revise });
       p2._n = n;
       const second = await genPart(p2);
 
@@ -395,6 +426,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/chapter") {
     return handleChapter(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/critique") {
+    return handleCritique(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/run") {

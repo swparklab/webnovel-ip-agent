@@ -106,6 +106,12 @@ const state = {
   streamingChapter: null,
   batchSize: 1,          // 한번에 생성할 화 수 (1 또는 5)
   totalChapters: 25,     // 시즌 길이(결말 지점)
+  critiques: {},         // n -> 자체 피드백 결과
+  critiqueBusy: {},      // n -> 피드백 생성 중 여부
+  noteOpen: {},          // n -> 사용자 의견 입력창 열림
+  noteDraft: {},         // n -> 사용자 의견 임시값
+  autoFeedback: false,   // 생성 후 자동 자체 피드백
+  lastRunChapters: [],   // 이번 실행에서 새로 생성한 화 번호
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
   errors: {},
@@ -752,6 +758,9 @@ function draftStudioHtml() {
           ${SEASON_OPTIONS.map((v) => `<option value="${v}"${target === v ? " selected" : ""}>${v}화</option>`).join("")}
         </select>
       </label>
+      <label class="chapter-auto" title="생성 후 회차마다 자동으로 자체 피드백을 만듭니다(호출 추가)">
+        <input type="checkbox" id="autoFeedback" ${state.autoFeedback ? "checked" : ""} ${state.chapterRunning ? "disabled" : ""} /> 자동 피드백
+      </label>
       ${action}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="novelDownload" type="button" title="생성된 회차를 하나의 소설 파일로 다운로드">⬇ 소설 다운로드</button>` : ""}
       ${maxCh > 1 && !state.chapterRunning ? `<button class="mini danger" id="chapterReset" type="button" title="2화 이후 생성 원고 삭제">원고 초기화</button>` : ""}
@@ -765,10 +774,40 @@ function draftStudioHtml() {
       const streaming = state.chapterRunning && state.streamingChapter === n;
       const cursor = streaming ? '<span class="cursor"></span>' : "";
       const tag = streaming ? `<span class="chapter-tag">생성 중…</span>` : "";
-      return `<article class="chapter-block">${tag}<div class="md-output manuscript">${window.renderMarkdown(map[n])}${cursor}</div></article>`;
+      const md = `<div class="md-output manuscript">${window.renderMarkdown(map[n])}${cursor}</div>`;
+      // 회차별 피드백/수정 액션 (생성 중이 아닐 때만)
+      let panel = "";
+      if (!state.chapterRunning) {
+        const busy = state.critiqueBusy[n];
+        const crit = state.critiques[n];
+        const noteOpen = state.noteOpen[n];
+        panel = `<div class="chapter-actions">
+          <button class="mini" data-act="critique" data-n="${n}" ${busy ? "disabled" : ""}>${busy ? "피드백 생성 중…" : crit ? "🔄 다시 피드백" : "🔍 자체 피드백"}</button>
+          ${crit ? `<button class="mini primary" data-act="apply" data-n="${n}">✦ 피드백 반영 보완</button>` : ""}
+          <button class="mini" data-act="note" data-n="${n}">✎ 내 의견으로 수정</button>
+        </div>
+        ${crit ? critiqueHtml(n, crit) : ""}
+        ${noteOpen ? `<div class="chapter-note">
+          <textarea data-note="${n}" placeholder="이 회차를 어떻게 고칠지 적어주세요. 예: 2화 중반 추격을 더 길게, 주인공을 더 능동적으로, 마지막 절단을 더 세게">${escapeHtml(state.noteDraft[n] || "")}</textarea>
+          <button class="mini primary" data-act="applynote" data-n="${n}">이 의견으로 수정</button>
+        </div>` : ""}`;
+      }
+      return `<article class="chapter-block">${tag}${md}${panel}</article>`;
     }).join('<hr class="chapter-sep" />');
   }
   return `<div class="chapter-studio">${controls}<div id="chapterList">${body}</div></div>`;
+}
+
+function critiqueHtml(n, c) {
+  const scores = Object.entries(c.scores || {}).map(([k, v]) => `${k} ${v}`).join(" · ");
+  const list = (arr, cls) => (arr && arr.length)
+    ? `<ul class="crit-${cls}">${arr.map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul>` : "";
+  return `<div class="chapter-critique${c.fallback ? " fallback" : ""}">
+    <div class="crit-head">자체 피드백 <strong>${c.overall ?? "-"}/100</strong> <span class="crit-scores">${scores}</span></div>
+    ${c.strengths?.length ? `<div class="crit-label">강점</div>${list(c.strengths, "good")}` : ""}
+    ${c.weaknesses?.length ? `<div class="crit-label">약점</div>${list(c.weaknesses, "bad")}` : ""}
+    ${c.fixes?.length ? `<div class="crit-label">수정 제안</div>${list(c.fixes, "fix")}` : ""}
+  </div>`;
 }
 
 function renderDraftStudio(panel) {
@@ -789,12 +828,47 @@ function renderDraftStudio(panel) {
     localStorage.setItem("sfSeasonLen", String(state.totalChapters));
     renderDraftStudio(panel);
   });
+  const auto = el("autoFeedback");
+  if (auto) auto.addEventListener("change", () => {
+    state.autoFeedback = auto.checked;
+    localStorage.setItem("sfAutoFeedback", auto.checked ? "1" : "0");
+  });
   const stop = el("chapterStop");
   if (stop) stop.addEventListener("click", () => { if (state.chapterController) state.chapterController.abort(); });
   const reset = el("chapterReset");
   if (reset) reset.addEventListener("click", resetChapters);
   const dl = el("novelDownload");
   if (dl) dl.addEventListener("click", downloadNovel);
+
+  // 회차별 피드백/수정 액션 (이벤트 위임)
+  panel.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", onChapterAction));
+  panel.querySelectorAll("textarea[data-note]").forEach((t) =>
+    t.addEventListener("input", () => { state.noteDraft[Number(t.dataset.note)] = t.value; }));
+}
+
+function onChapterAction(e) {
+  const n = Number(e.currentTarget.dataset.n);
+  const act = e.currentTarget.dataset.act;
+  if (act === "critique") { fetchCritique(n, false); return; }
+  if (act === "apply") {
+    const c = state.critiques[n];
+    const note = c && c.fixes && c.fixes.length
+      ? `다음 피드백을 반영해 개선하라:\n- ${c.fixes.join("\n- ")}${c.weaknesses?.length ? `\n(약점: ${c.weaknesses.join(" / ")})` : ""}`
+      : "";
+    if (!note) { toast("반영할 피드백이 없습니다. 먼저 자체 피드백을 생성하세요.", "warn"); return; }
+    reviseChapter(n, note);
+    return;
+  }
+  if (act === "note") {
+    state.noteOpen[n] = !state.noteOpen[n];
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    return;
+  }
+  if (act === "applynote") {
+    const note = state.noteDraft[n];
+    if (!note || !note.trim()) { toast("수정 의견을 입력하세요.", "warn"); return; }
+    reviseChapter(n, note);
+  }
 }
 
 function resetChapters() {
@@ -810,8 +884,8 @@ function currentMaxChapter() {
   return nums.length ? Math.max(...nums) : 0;
 }
 
-// 한 번의 /api/chapter 요청(여러 화 배치)을 스트리밍 처리. running 상태는 호출부가 관리한다.
-async function streamChapterRequest(from, count) {
+// 한 번의 /api/chapter 요청(여러 화 배치/수정)을 스트리밍 처리. running 상태는 호출부가 관리한다.
+async function streamChapterRequest(from, count, opts = {}) {
   const prevText = from > 1 ? (chapterMap()[from - 1] || "") : "";
   const input = collectInput();
   const model = el("modelSelect").value || state.config.defaultModel;
@@ -821,6 +895,7 @@ async function streamChapterRequest(from, count) {
     body: JSON.stringify({
       input, model, fromChapter: from, count, total: state.totalChapters, prevText,
       ctx: { foresight: state.buffers.foresight, world: state.buffers.world, plot: state.buffers.plot },
+      revise: opts.revise || undefined,
     }),
     signal: state.chapterController.signal,
   });
@@ -849,6 +924,9 @@ async function streamChapterRequest(from, count) {
       } else if (type === "chapter-delta") {
         state.chapters[d.n] = (state.chapters[d.n] || "") + d.text;
         if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+      } else if (type === "chapter-done") {
+        state.lastRunChapters.push(d.n);
+        delete state.critiques[d.n]; // 새로/다시 쓰였으니 기존 피드백 무효화
       } else if (type === "error") {
         toast(d.message || "원고 생성 오류", "error");
       }
@@ -863,6 +941,7 @@ async function runChapterLoop(from, toEnd) {
   state.chapterRunning = true;
   state.streamingChapter = from;
   state.chapterController = new AbortController();
+  state.lastRunChapters = [];
   renderDraftStudio(el("outputPanel"));
   try {
     let cursor = from;
@@ -879,6 +958,16 @@ async function runChapterLoop(from, toEnd) {
     const reached = currentMaxChapter() >= state.totalChapters;
     el("runStatus").textContent = reached ? "결말까지 완성" : "원고 완료";
     toast(reached ? `결말(${state.totalChapters}화)까지 완성했습니다.` : "원고를 생성했습니다.", "success");
+    // 자동 피드백: 이번에 생성한 회차들을 차례로 자체 평가한다.
+    if (state.autoFeedback && state.lastRunChapters.length) {
+      const targets = [...new Set(state.lastRunChapters)];
+      el("runStatus").textContent = "자체 피드백 생성 중";
+      for (const n of targets) {
+        if (state.chapterController?.signal.aborted) break;
+        await fetchCritique(n, true);
+      }
+      el("runStatus").textContent = "피드백 완료";
+    }
   } catch (err) {
     if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("원고 생성을 중단했습니다.", "warn"); }
     else { el("runStatus").textContent = "오류"; toast(err.message || "원고 생성 실패", "error"); }
@@ -895,6 +984,61 @@ function generateChapters() { return runChapterLoop(currentMaxChapter() + 1, fal
 
 // 결말(total)까지 자동 반복 생성.
 function generateToEnd() { return runChapterLoop(currentMaxChapter() + 1, true); }
+
+// 회차 자체 피드백 생성.
+async function fetchCritique(n, silent) {
+  const text = chapterMap()[n];
+  if (!text) return;
+  state.critiqueBusy[n] = true;
+  if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  try {
+    const res = await fetch("/api/critique", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        n, chapterText: text, input: collectInput(),
+        model: el("modelSelect").value, ctx: { plot: state.buffers.plot },
+      }),
+    });
+    const data = await res.json();
+    if (data.ok && data.critique) {
+      state.critiques[n] = data.critique;
+      if (!silent) toast(`${n}화 자체 피드백 완료 (${data.critique.overall}/100)`, "success");
+    } else if (!silent) toast("피드백 생성 실패", "error");
+  } catch {
+    if (!silent) toast("피드백 생성 실패", "error");
+  } finally {
+    state.critiqueBusy[n] = false;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+// 회차를 지침(피드백 또는 사용자 의견)에 따라 제자리에서 다시 쓴다.
+async function reviseChapter(n, note) {
+  if (state.chapterRunning || state.running) return;
+  note = String(note || "").trim();
+  if (!note) { toast("수정 지침이 없습니다.", "warn"); return; }
+  const original = chapterMap()[n];
+  if (!original) return;
+  state.chapterRunning = true;
+  state.streamingChapter = n;
+  state.chapterController = new AbortController();
+  state.noteOpen[n] = false;
+  el("runStatus").textContent = `${n}화 수정 중`;
+  renderDraftStudio(el("outputPanel"));
+  try {
+    await streamChapterRequest(n, 1, { revise: { note, original } });
+    el("runStatus").textContent = `${n}화 수정 완료`;
+    toast(`${n}화를 수정했습니다.`, "success");
+  } catch (err) {
+    if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("수정을 중단했습니다.", "warn"); }
+    else { el("runStatus").textContent = "오류"; toast(err.message || "수정 실패", "error"); }
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    state.streamingChapter = null;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
 
 /* --------------------------- 기획 아키텍트 ------------------------------ */
 
@@ -1147,6 +1291,7 @@ function boot() {
   if (savedBatch === 1 || savedBatch === 5) state.batchSize = savedBatch;
   const savedSeason = Number(localStorage.getItem("sfSeasonLen"));
   if (SEASON_OPTIONS.includes(savedSeason)) state.totalChapters = savedSeason;
+  state.autoFeedback = localStorage.getItem("sfAutoFeedback") === "1";
   renderAgentGrid();
   renderTabs();
 
