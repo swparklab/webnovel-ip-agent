@@ -99,6 +99,7 @@ const state = {
   studio: "production",  // 'production' | 'platform'
   activeTab: "foresight",
   platformMeta: null,
+  references: [],        // [{name, text, chars, preview, weak}] 과학 근거 자료
   chapters: {},          // chapterNumber -> markdown (연속 원고)
   chapterRunning: false,
   chapterController: null,
@@ -250,6 +251,14 @@ function collectInput() {
     .map((n) => n.dataset.platform)
     .join(",");
   input.studio = state.studio;
+  // 과학 근거 자료: 프롬프트용 합본 문자열(상한)과 복원용 배열을 함께 싣는다.
+  if (state.references.length) {
+    input.references = state.references
+      .map((r) => `【${r.name}】\n${r.text}`)
+      .join("\n\n")
+      .slice(0, 6000);
+    input._references = state.references;
+  }
   return input;
 }
 
@@ -267,6 +276,8 @@ function fillForm(data) {
       if (node) node.checked = set.has(node.dataset.platform);
     });
   }
+  state.references = Array.isArray(data._references) ? data._references : [];
+  renderRefList();
 }
 
 /* ------------------------------ Rendering ------------------------------- */
@@ -602,6 +613,94 @@ function stopAgent() {
   if (state.controller) state.controller.abort();
 }
 
+/* --------------------------- 과학 근거 자료 ------------------------------ */
+
+function renderRefList() {
+  const box = el("refList");
+  if (!box) return;
+  box.innerHTML = state.references.map((r, i) => `
+    <span class="ref-chip${r.weak ? " weak" : ""}" title="${escapeHtml(r.preview || "")}">
+      📄 ${escapeHtml(r.name)} <em>${r.chars.toLocaleString()}자</em>
+      <button type="button" class="ref-x" data-ref="${i}" aria-label="삭제">✕</button>
+    </span>`).join("");
+  box.querySelectorAll(".ref-x").forEach((b) => b.addEventListener("click", () => {
+    state.references.splice(Number(b.dataset.ref), 1);
+    renderRefList();
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+  }));
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",").pop());
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleRefUpload(file) {
+  if (!file) return;
+  if (file.size > 12 * 1024 * 1024) { toast("파일이 너무 큽니다(최대 12MB).", "warn"); return; }
+  const isPdf = /\.pdf$/i.test(file.name) || file.type === "application/pdf";
+  el("runStatus").textContent = "자료 추출 중";
+  try {
+    let payload;
+    if (isPdf) {
+      payload = { name: file.name, kind: "pdf", dataBase64: await fileToBase64(file) };
+    } else {
+      payload = { name: file.name, kind: "text", text: await file.text() };
+    }
+    const res = await fetch("/api/reference", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "자료 처리 실패");
+    state.references.push({ name: data.name, text: data.text, chars: data.chars, preview: data.preview, weak: data.weak });
+    renderRefList();
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = "자료 추가됨";
+    if (data.weak) toast(`'${data.name}' 추출 텍스트가 적습니다(${data.chars}자). 스캔본일 수 있어요 — TXT로 올리면 정확합니다.`, "warn");
+    else toast(`'${data.name}' 근거 자료를 추가했습니다 (${data.chars.toLocaleString()}자 추출${data.truncated ? ", 일부만 사용" : ""}).`, "success");
+  } catch (err) {
+    el("runStatus").textContent = "오류";
+    toast(err.message || "자료 업로드 실패", "error");
+  } finally {
+    const input = el("refFile"); if (input) input.value = "";
+  }
+}
+
+/* ----------------------- 최종 소설 다운로드 ----------------------------- */
+
+// 작가용 부가 섹션을 떼어 깨끗한 본문만 남긴다.
+function cleanChapterForNovel(text) {
+  let t = String(text || "");
+  ["## 장면 카드", "## 다음 원고 지시", "## 다음 화 예고"].forEach((h) => {
+    const i = t.indexOf(h);
+    if (i !== -1) t = t.slice(0, i);
+  });
+  return t.replace(/^##\s+/, "").trim();
+}
+
+function downloadNovel() {
+  const map = chapterMap();
+  const nums = chapterNumbers(map);
+  if (!nums.length) { toast("생성된 원고가 없습니다. 먼저 회차를 생성하세요.", "warn"); return; }
+  const input = collectInput();
+  const title = input.ipTitle || "무제 소설";
+  const header = [title, input.logline ? `\n${input.logline}` : "", `\n\n${"=".repeat(40)}\n`].join("");
+  const body = nums.map((n) => cleanChapterForNovel(map[n])).filter(Boolean).join("\n\n\n");
+  const novel = `${header}\n${body}\n`;
+  const blob = new Blob([novel], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${title.replace(/[^\p{L}\p{N}]+/gu, "-")}-novel.txt`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`최종 소설(${nums.length}화)을 다운로드했습니다.`, "success");
+}
+
 /* --------------------------- 연속 원고 스튜디오 -------------------------- */
 
 const MAX_CHAPTER = 10;
@@ -642,6 +741,7 @@ function draftStudioHtml() {
         </select>
       </label>
       ${action}
+      ${nums.length && !state.chapterRunning ? `<button class="mini" id="novelDownload" type="button" title="생성된 회차를 하나의 소설 파일로 다운로드">⬇ 소설 다운로드</button>` : ""}
       ${maxCh > 1 && !state.chapterRunning ? `<button class="mini danger" id="chapterReset" type="button" title="2화 이후 생성 원고 삭제">원고 초기화</button>` : ""}
     </div>`;
 
@@ -673,6 +773,8 @@ function renderDraftStudio(panel) {
   if (stop) stop.addEventListener("click", () => { if (state.chapterController) state.chapterController.abort(); });
   const reset = el("chapterReset");
   if (reset) reset.addEventListener("click", resetChapters);
+  const dl = el("novelDownload");
+  if (dl) dl.addEventListener("click", downloadNovel);
 }
 
 function resetChapters() {
@@ -1017,6 +1119,7 @@ function boot() {
   el("runAgent").addEventListener("click", runAgent);
   el("stopAgent").addEventListener("click", stopAgent);
   el("ideateBtn").addEventListener("click", ideateFill);
+  el("refFile").addEventListener("change", (e) => handleRefUpload(e.target.files[0]));
   // '예시' 버튼: 현재 선택된 장르의 기본 예시 프리셋을 불러온다.
   el("loadExample").addEventListener("click", () => onGenreChange(true));
   el("exportMarkdown").addEventListener("click", exportMarkdown);

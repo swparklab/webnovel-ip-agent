@@ -260,3 +260,16 @@ textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 
   position: absolute; right: 0; top: -2px; font-size: 0.68rem; font-weight: 800;
   color: var(--green); background: #e3f4ee; padding: 2px 8px; border-radius: 999px;
 }
+
+/* ----- 과학 근거 자료 업로드 ----- */
+#refFile { font-size: 0.8rem; padding: 6px; background: var(--surface-2); }
+.ref-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+.ref-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.76rem; font-weight: 700; color: var(--ink);
+  background: #e3f4ee; border: 1px solid var(--green); border-radius: 999px; padding: 3px 8px;
+}
+.ref-chip.weak { background: #fdf3e3; border-color: var(--amber); }
+.ref-chip em { font-style: normal; color: var(--muted); font-weight: 600; }
+.ref-x { border: none; background: transparent; cursor: pointer; color: var(--muted); font-size: 0.8rem; padding: 0 2px; }
+.ref-x:hover { color: var(--rose); }

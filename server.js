@@ -8,7 +8,10 @@ const { config, resolveMode, publicConfig } = require("./lib/config");
 const { runPipeline, pipelineAgents } = require("./lib/orchestrator");
 const { streamMessage } = require("./lib/llm");
 const { buildIdeatePrompt, extractFields, localIdeate } = require("./lib/ideate");
-const { buildChapterPrompt, localChapter, MAX_CHAPTER } = require("./lib/chapters");
+const {
+  buildChapterFirstPrompt, buildChapterSecondPrompt, localChapter, MAX_CHAPTER,
+} = require("./lib/chapters");
+const { extractTextFromPdf } = require("./lib/pdf");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
@@ -51,12 +54,12 @@ function sendJson(res, status, payload) {
   res.end(body);
 }
 
-function readBody(req) {
+function readBody(req, maxBytes = 4_000_000) {
   return new Promise((resolve, reject) => {
     let body = "";
     req.on("data", (chunk) => {
       body += chunk;
-      if (body.length > 4_000_000) {
+      if (body.length > maxBytes) {
         reject(new Error("Request body too large"));
         req.destroy();
       }
@@ -184,6 +187,43 @@ async function handleRun(req, res) {
   }
 }
 
+// 과학 근거 자료 업로드: PDF/텍스트 → 추출 텍스트. (생성 프롬프트의 '과학적 근거'로 주입)
+const REF_TEXT_CAP = 20000; // 자료당 저장 상한
+async function handleReference(req, res) {
+  let payload;
+  try {
+    const body = await readBody(req, 16_000_000); // base64 업로드 여유 (~12MB 파일)
+    payload = body ? JSON.parse(body) : {};
+  } catch {
+    return sendJson(res, 413, { ok: false, error: "파일이 너무 큽니다(최대 약 12MB)." });
+  }
+  const name = String(payload.name || "reference").slice(0, 120);
+  let text = "";
+  try {
+    if (payload.kind === "pdf" && payload.dataBase64) {
+      const buf = Buffer.from(payload.dataBase64, "base64");
+      text = buf.slice(0, 5).toString("latin1") === "%PDF-"
+        ? extractTextFromPdf(buf)
+        : buf.toString("utf8");
+    } else if (typeof payload.text === "string") {
+      text = payload.text;
+    }
+  } catch (err) {
+    return sendJson(res, 200, { ok: false, error: `자료 처리 실패: ${err.message}` });
+  }
+  text = text.replace(/\u0000/g, "").trim();
+  const capped = text.slice(0, REF_TEXT_CAP);
+  return sendJson(res, 200, {
+    ok: true,
+    name,
+    chars: text.length,
+    truncated: text.length > REF_TEXT_CAP,
+    text: capped,
+    preview: capped.slice(0, 280),
+    weak: capped.length < 200, // 추출이 빈약하면(스캔 PDF 등) 경고용
+  });
+}
+
 // 기획 아키텍트: 아이디어 한 줄 → Core IP 폼 필드(JSON). SSE 아님(단발 응답).
 async function handleIdeate(req, res) {
   const payload = await readJson(req);
@@ -250,6 +290,22 @@ async function handleChapter(req, res) {
   emit("meta", { from, end, mode });
 
   try {
+    // 한 회차를 [전반부]+[후반부] 2단계로 생성해 5,000~6,000자를 안정적으로 확보한다.
+    const genPart = async (prompt) => {
+      let acc = "";
+      const { text } = await streamMessage({
+        provider: mode,
+        model,
+        system: prompt.system,
+        messages: [{ role: "user", content: prompt.user }],
+        temperature: 0.85,
+        maxTokens: 6000, // 파트당 ~3,000자(한국어) 출력 여유
+        signal: controller.signal,
+        onText: (chunk) => { acc += chunk; emit("chapter-delta", { n: prompt._n, text: chunk }); },
+      });
+      return text || acc;
+    };
+
     for (let n = from; n <= end; n++) {
       emit("chapter-start", { n });
       if (mode === "local") {
@@ -259,19 +315,17 @@ async function handleChapter(req, res) {
         prevText = text;
         continue;
       }
-      let acc = "";
-      const { system, user } = buildChapterPrompt({ input, n, prevText, ctx });
-      const { text } = await streamMessage({
-        provider: mode,
-        model,
-        system,
-        messages: [{ role: "user", content: user }],
-        temperature: 0.85,
-        maxTokens: 3500,
-        signal: controller.signal,
-        onText: (chunk) => { acc += chunk; emit("chapter-delta", { n, text: chunk }); },
-      });
-      const full = text || acc;
+      const p1 = buildChapterFirstPrompt({ input, n, prevText, ctx });
+      p1._n = n;
+      const first = await genPart(p1);
+      if (controller.signal.aborted) break;
+
+      emit("chapter-delta", { n, text: "\n\n" });
+      const p2 = buildChapterSecondPrompt({ input, n, prevText, ctx, firstText: first });
+      p2._n = n;
+      const second = await genPart(p2);
+
+      const full = `${first}\n\n${second}`;
       prevText = full;
       emit("chapter-done", { n, chars: full.length });
       if (controller.signal.aborted) break;
@@ -326,6 +380,10 @@ async function handleApi(req, res, pathname) {
       successFormula: SUCCESS_FORMULA,
       failureFormula: FAILURE_FORMULA,
     });
+  }
+
+  if (req.method === "POST" && pathname === "/api/reference") {
+    return handleReference(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/ideate") {
