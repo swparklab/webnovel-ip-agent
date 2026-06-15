@@ -112,6 +112,7 @@ const state = {
   noteOpen: {},          // n -> 사용자 의견 입력창 열림
   noteDraft: {},         // n -> 사용자 의견 임시값
   autoFeedback: false,   // 생성 후 자동 자체 피드백
+  autoFinalPass: true,   // 전자동에서 마지막에 전체 보완 1회
   lastRunChapters: [],   // 이번 실행에서 새로 생성한 화 번호
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
@@ -762,7 +763,11 @@ function draftStudioHtml() {
       <label class="chapter-auto" title="생성 후 회차마다 자동으로 자체 피드백을 만듭니다(호출 추가)">
         <input type="checkbox" id="autoFeedback" ${state.autoFeedback ? "checked" : ""} ${state.chapterRunning ? "disabled" : ""} /> 자동 피드백
       </label>
+      <label class="chapter-auto" title="전자동 끝에 전체 회차를 한번 더 보완합니다">
+        <input type="checkbox" id="autoFinalPass" ${state.autoFinalPass ? "checked" : ""} ${state.chapterRunning ? "disabled" : ""} /> 최종 전체보완
+      </label>
       ${action}
+      ${canMore && !state.chapterRunning ? `<button class="command primary" id="autopilot" type="button" title="${next}~${target}화를 [생성→피드백→보완] 자동 반복 후 마무리 전체보완"><span>🤖 전자동 (~${target}화)</span></button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="critiqueAll" type="button" title="모든 회차에 자체 피드백을 한번에 생성">🔍 전체 피드백</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini primary" id="reviseAll" type="button" title="모든 회차를 각자의 피드백대로 한번에 보완">✦ 전체 보완</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="novelDownload" type="button" title="생성된 회차를 하나의 소설 파일로 다운로드">⬇ 소설 다운로드</button>` : ""}
@@ -854,6 +859,13 @@ function renderDraftStudio(panel) {
     state.autoFeedback = auto.checked;
     localStorage.setItem("sfAutoFeedback", auto.checked ? "1" : "0");
   });
+  const fp = el("autoFinalPass");
+  if (fp) fp.addEventListener("change", () => {
+    state.autoFinalPass = fp.checked;
+    localStorage.setItem("sfAutoFinalPass", fp.checked ? "1" : "0");
+  });
+  const ap = el("autopilot");
+  if (ap) ap.addEventListener("click", autopilot);
   const stop = el("chapterStop");
   if (stop) stop.addEventListener("click", () => { if (state.chapterController) state.chapterController.abort(); });
   const reset = el("chapterReset");
@@ -1025,6 +1037,57 @@ async function fetchCritique(n, silent) {
     if (!silent) toast("피드백 생성 실패", "error");
   } finally {
     state.critiqueBusy[n] = false;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
+}
+
+// 전자동: from~N 까지 [생성 → 피드백 → 보완] 반복, 끝에 마무리 전체 보완 1회.
+async function autopilot() {
+  if (state.chapterRunning || state.running) return;
+  const N = state.totalChapters;
+  const from = currentMaxChapter() + 1;
+  const finalPass = state.autoFinalPass;
+  if (from > N && !finalPass) { toast(`이미 ${N}화까지 생성했습니다.`, "warn"); return; }
+  const steps = [
+    from <= N ? `· ${from}~${N}화: 각 화 [생성 → 자체 피드백 → 보완]` : "",
+    finalPass ? "· 마무리: 전체 회차 [피드백 → 보완] 1회" : "",
+  ].filter(Boolean).join("\n");
+  if (!confirm(`전자동 집필을 시작합니다.\n${steps}\n\n회차마다 생성+재집필이라 호출이 매우 많고 오래 걸립니다(언제든 중단 가능). 진행할까요?`)) return;
+
+  state.chapterRunning = true;
+  state.chapterController = new AbortController();
+  state.lastRunChapters = [];
+  renderDraftStudio(el("outputPanel"));
+  const aborted = () => Boolean(state.chapterController?.signal.aborted);
+  try {
+    // 1) 회차별: 생성 → 피드백 → 보완 (harnessRefine = 전 평가 → 재집필 → 후 평가)
+    for (let n = from; n <= N; n++) {
+      if (aborted()) break;
+      el("runStatus").textContent = `전자동 ${n}/${N} — 생성`;
+      state.streamingChapter = n;
+      await streamChapterRequest(n, 1);
+      if (aborted()) break;
+      el("runStatus").textContent = `전자동 ${n}/${N} — 피드백·보완`;
+      await harnessRefine(n, { maxAttempts: 1 });
+    }
+    // 2) 마무리: 전체 회차 한번 더 피드백 + 보완
+    if (finalPass && !aborted()) {
+      const nums = chapterNumbers();
+      for (const n of nums) {
+        if (aborted()) break;
+        el("runStatus").textContent = `마무리 전체보완 — ${n}/${nums.length}화`;
+        await harnessRefine(n, { maxAttempts: 1 });
+      }
+    }
+    el("runStatus").textContent = aborted() ? "중단됨" : "전자동 완료";
+    toast(aborted() ? "전자동을 중단했습니다." : `전자동 완료 (~${N}화)`, aborted() ? "warn" : "success");
+  } catch (err) {
+    if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("전자동을 중단했습니다.", "warn"); }
+    else { el("runStatus").textContent = "오류"; toast(err.message || "전자동 실패", "error"); }
+  } finally {
+    state.chapterRunning = false;
+    state.chapterController = null;
+    state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
   }
 }
@@ -1419,6 +1482,7 @@ function boot() {
   const savedSeason = Number(localStorage.getItem("sfSeasonLen"));
   if (SEASON_OPTIONS.includes(savedSeason)) state.totalChapters = savedSeason;
   state.autoFeedback = localStorage.getItem("sfAutoFeedback") === "1";
+  if (localStorage.getItem("sfAutoFinalPass") === "0") state.autoFinalPass = false;
   renderAgentGrid();
   renderTabs();
 
