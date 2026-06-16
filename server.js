@@ -13,7 +13,7 @@ const {
 } = require("./lib/chapters");
 const { extractTextFromPdf } = require("./lib/pdf");
 const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/critique");
-const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar } = require("./lib/memory");
+const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar, composeCanonLock } = require("./lib/memory");
 const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
 const { buildToolPrompt, localTool, TOOLS } = require("./lib/tools");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
@@ -452,6 +452,9 @@ async function handleChapter(req, res) {
     const storySoFar = composeStorySoFar(payload.memories, { upTo: from });
     if (storySoFar) ctx.storySoFar = storySoFar;
   }
+  // 세계관 캐논 락: 초기 세계관 규칙 + 누적 확정 설정을 항상 풀웨이트로 주입(후반부 드리프트 방지).
+  const canonLock = composeCanonLock(payload.memories, input, { upTo: from });
+  if (canonLock) ctx.canonLock = canonLock;
   const revise = payload.revise && payload.revise.note ? payload.revise : null;
   let prevText = String(payload.prevText || "");
 
