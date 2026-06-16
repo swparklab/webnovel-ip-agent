@@ -18,63 +18,62 @@
 
 ### FIG. 1 — 전체 시스템 구성도 (Master Architecture)
 
-```text
-┌──────────────────────────────────────────────────────────────────────────────┐
-│        SF·웹소설 IP 제작·운영 시스템 — 전체 구성 (FIG. 1)                         │
-└──────────────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    U["👤 [100] 사용자 — 작가 · 플랫폼 PD · IP 기획자<br/>입력: 아이디어 · 작품입력(40+필드) · 원고/리뷰 · 과학근거 PDF"]
 
- [100] 사용자  ─ 웹소설 작가 / 플랫폼 PD / IP 기획자
-   │   입력: 아이디어 한 줄 · 작품 입력(40+필드) · 원고/리뷰 · 과학근거 PDF
-   ▼
-╔══════════════════════════ [200] 프론트엔드 (public/) ══════════════════════════╗
-║  [210] index.html  제작실·운영실 UI · IP Bible 폼 · Before/After 모달           ║
-║  [220] app.js      SSE 스트림 파서 · 상태관리 · 실시간 렌더 · 스토리바이블 패널  ║
-║  [230] markdown.js · styles.css                                                 ║
-╚════════════════════════════════════╤═══════════════════════════════════════════╝
-              REST(JSON 요청)  │  ▲  SSE(text/event-stream, 토큰 실시간 스트림)
-                               ▼  │
-╔══════════════════════════ [300] HTTP 서버 (server.js) ═════════════════════════╗
-║  라우터 · SSE 방출 · 정적 서빙 · 본문 상한 · 경로 traversal 차단                 ║
-║   [310] 단발 REST  : /ideate /impact /synopsis /critique /audit /reference      ║
-║                      /playbook /platform-meta /config /health                   ║
-║   [320] SSE 스트림 : /run(제작·운영 파이프라인) · /chapter(연속 회차 집필)        ║
-║   [330] 영속/출력  : /projects(CRUD) · /export(통합 Markdown)                    ║
-╚═══════════╤═══════════════════════════════════════════════════╤═════════════════╝
-            ▼                                                   ▼
- [400] 오케스트레이터 (orchestrator.js)          [500] 단발 AI 기능 모듈
-   · dependsOn 분석 → 실행 웨이브 산출             · impact.js   (Before/After 진단)
-   · 같은 웨이브 병렬 / 앞 웨이브 결과 주입         · ideate.js   (아이디어→Core IP)
-   · 이벤트 방출(meta·start·delta·done)           · chapters.js (연속 회차 집필)
-        │                                          · memory.js   (연재 메모리/캐논)
-        │  ┌─────────────────────────────┐         · critique.js (회차 자가비평)
-        │  │ [410] 제작실 6-에이전트 DAG  │         · audit.js    (완성도 심사)
-        │  │ [420] 운영실 5-에이전트 DAG  │              │
-        │  └─────────────────────────────┘              │
-        └───────────────────────┬───────────────────────┘
-                                ▼
-                  [600] LLM 추상화 계층 (llm.js)  ── 단일 streamMessage() 인터페이스
-            ┌───────────────────┼────────────────────────┐
-            ▼                   ▼                         ▼
-   [610] api 모드        [620] cli 모드           [630] local 모드
-   anthropic.js          claude-cli.js            local-engine.js · platform-local.js
-   (Messages API,        (Claude Code/Max         (LLM 없는 결정론적 폴백,
-    토큰 과금)            구독, 무 과금)            전 장르/운영실 데모 보장)
-            │                   │
-            └─────────┬─────────┘
-                      ▼
-        [700] 지식베이스 (구조화 데이터 · 무 LLM)
-          · playbook.js      23개 장르 흥행 문법(공식·5화·루프·제목·실패패턴)
-          · platform-intel.js 6층 태깅 분류 · 플랫폼 규칙 · 페르소나 · 성공/실패식
-                      │  (모든 에이전트 프롬프트에 자동 주입)
-                      ▼
-        [800] 저장소  store.js  →  data/projects/*.json (파일 기반, 단일 테넌트)
+    subgraph FE["🖥️ [200] 프론트엔드 · public/"]
+        direction TB
+        FE1["[210] index.html — 제작실/운영실 UI · IP Bible 폼 · Before/After 모달"]
+        FE2["[220] app.js — SSE 파서 · 상태관리 · 실시간 렌더 · 스토리바이블 패널"]
+    end
 
-  ── 도면부호 ──────────────────────────────────────────────────────────────────
-   100 사용자        200 프론트엔드     300 HTTP/REST·SSE 서버   400 오케스트레이터
-   410 제작 DAG      420 운영 DAG       500 단발 AI 모듈         600 LLM 추상화
-   610 API엔진       620 CLI엔진        630 로컬폴백             700 지식베이스
-   800 영속 저장소
+    subgraph SV["🌐 [300] HTTP 서버 · server.js"]
+        direction TB
+        SV1["[310] 단발 REST — ideate · impact · synopsis · critique · audit · reference · playbook · platform-meta"]
+        SV2["[320] SSE 스트림 — run(제작·운영) · chapter(연속 회차)"]
+        SV3["[330] 영속/출력 — projects(CRUD) · export"]
+    end
+
+    subgraph CORE["⚙️ 처리 계층"]
+        direction TB
+        OR["[400] 오케스트레이터 · orchestrator.js<br/>dependsOn → 웨이브 · 병렬 · 결과 주입 · 이벤트 방출"]
+        DAG["[410] 제작실 6-에이전트 DAG · [420] 운영실 5-에이전트 DAG"]
+        AIM["[500] 단발 AI 모듈 — impact · ideate · chapters · memory · critique · audit"]
+        OR --> DAG
+    end
+
+    subgraph LLM["🧠 [600] LLM 추상화 · llm.js — 단일 streamMessage() 인터페이스"]
+        direction LR
+        L1["[610] api<br/>anthropic.js<br/>(토큰 과금)"]
+        L2["[620] cli<br/>claude-cli.js<br/>(Max 구독)"]
+        L3["[630] local<br/>local-engine · platform-local<br/>(무 LLM 폴백)"]
+    end
+
+    KB["📚 [700] 지식베이스 (구조화 데이터 · 무 LLM)<br/>playbook.js — 23개 장르 흥행문법 · platform-intel.js — 플랫폼 규칙 · 6층 분류 · 페르소나"]
+    ST["💾 [800] 저장소 · store.js → data/projects/*.json (파일 기반)"]
+
+    U <-->|"REST(JSON) · SSE(토큰 스트림)"| FE
+    FE <-->|"text/event-stream"| SV
+    SV2 --> OR
+    SV1 --> AIM
+    SV3 --> ST
+    OR --> LLM
+    AIM --> LLM
+    DAG --> LLM
+    KB -. "모든 에이전트 프롬프트에 자동 주입" .-> OR
+    KB -.-> AIM
 ```
+
+**도면부호 (Reference Numerals)**
+
+| 번호 | 구성요소 | 번호 | 구성요소 |
+|---|---|---|---|
+| **100** | 사용자 (작가·PD·기획자) | **500** | 단발 AI 기능 모듈 |
+| **200** | 프론트엔드 (public/) | **600** | LLM 추상화 계층 (llm.js) |
+| **300** | HTTP·REST·SSE 서버 (server.js) | **610 / 620 / 630** | api / cli / local 엔진 |
+| **400** | 오케스트레이터 (orchestrator.js) | **700** | 지식베이스 (playbook · platform-intel) |
+| **410 / 420** | 제작실 / 운영실 에이전트 DAG | **800** | 영속 저장소 (store.js) |
 
 ### FIG. 2 — 엔드투엔드 사용자 워크플로우 (Idea → IP)
 
