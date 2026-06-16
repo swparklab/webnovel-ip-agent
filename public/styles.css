@@ -409,3 +409,9 @@ body.modal-open { overflow: hidden; }
 .imp-changes { margin-top: 16px; padding: 12px 16px; background: var(--surface-2); border-radius: 10px; }
 .imp-cta { display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
 @media (max-width: 720px) { .imp-cols { grid-template-columns: 1fr; } .modal-card { padding: 20px 16px; } }
+
+/* ----- AI미래학자 박성우(foresight) 시그니처 모드 ----- */
+.foresight-intro { border-left: 4px solid #2f6db0; background: #f3f8fe; }
+.foresight-intro .section-note { color: #2f6db0; }
+body.studio-foresight .studio-btn.active { color: #2f6db0; border-color: #2f6db0; }
+body.studio-foresight #brandEyebrow { color: #2f6db0; }

@@ -1,8 +1,8 @@
 {
-  "name": "sf-webnovel-future-agent",
-  "version": "2.0.0",
+  "name": "webnovel-ip-agent",
+  "version": "3.0.0",
   "private": true,
-  "description": "Commercial AI agent tool that turns an AI-future SF premise into a production-ready webnovel IP using a real Claude-powered agent pipeline.",
+  "description": "All-genre webnovel IP agent — turns an idea into a production-ready webnovel IP via a Claude-powered multi-agent pipeline. Three studios: Production, Operations, and the AI-foresight 'Park Seong-Woo' signature mode.",
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",

@@ -91,7 +91,7 @@ function reportToMarkdown(record) {
   const input = record.input || {};
   const agents = record.report?.agents || {};
   const lines = [
-    `# ${record.title || input.ipTitle || "SF WebNovel Future Agent Report"}`,
+    `# ${record.title || input.ipTitle || "웹소설 IP 에이전트 리포트"}`,
     "",
     `- 생성: ${record.report?.generatedAt || record.updatedAt || ""}`,
     `- 모델: ${record.report?.model || "—"}`,
@@ -474,7 +474,7 @@ async function handleApi(req, res, pathname) {
   if (req.method === "GET" && pathname === "/api/health") {
     return sendJson(res, 200, {
       ok: true,
-      app: "SF WebNovel Future Agent",
+      app: "Webnovel IP Agent",
       mode: resolveMode(),
       time: new Date().toISOString(),
     });
@@ -629,7 +629,7 @@ server.listen(config.port, config.host, () => {
     cli: "Claude Code 구독 연동 (Max/Pro)",
     local: "로컬 폴백 (LLM 없음)",
   }[resolveMode()];
-  console.log(`SF WebNovel Future Agent · ${label}`);
+  console.log(`Webnovel IP Agent (웹소설 IP 에이전트) · ${label}`);
   console.log(`→ http://${config.host}:${config.port}`);
 });
 

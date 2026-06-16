@@ -1,11 +1,15 @@
-# 🚀 SF WebNovel Future Agent
+# 🚀 웹소설 IP 에이전트 (Webnovel IP Agent)
 
-> **An AI-future SF webnovel IP production agent** — turns a single future premise into a production-ready webnovel IP through a real Claude-powered, 6-agent orchestration pipeline.
+> **전 장르 웹소설 IP 제작 에이전트** — 막연한 아이디어 한 줄을 연재 가능한 웹소설 IP로 바꾸는, Claude 기반 멀티에이전트 파이프라인.
 
-박성우(AI FUTURE STREAMER)의 `AI FORESIGHT` 관점을 바탕으로 만든 **AI 미래 SF 웹소설 제작 AI Agent 툴**입니다.
-실제 Claude(Anthropic) API로 동작하는 6-에이전트 오케스트레이션 파이프라인이 작품 기획을 받아 SF Bible, 시즌 설계, 1화 원고, 검수, OSMU까지 **실시간 스트리밍**으로 생성합니다.
+23개 전 장르(로판·현판·무협·로맨스·BL·재벌·스릴러·힐링·SF 등)를 동등하게 지원하는 **범용 웹소설 IP 에이전트**입니다. 실제 Claude(Anthropic)로 동작하는 멀티에이전트 파이프라인이 기획·세계관·시즌 설계·회차 원고·검수·OSMU·플랫폼 운영까지 **실시간 스트리밍**으로 생성합니다.
 
-> v1은 키 없이 도는 결정론적 시뮬레이터였습니다. v2는 실제 LLM 연동 · 스트리밍 · 프로젝트 저장 · 안전한 키 관리를 갖춘 **상업 운영용 MVP**입니다.
+**세 개의 스튜디오**로 구성됩니다.
+- **제작실** — 전 장르 웹소설 IP를 생성하는 서사 파이프라인(기본).
+- **운영실** — 같은 작품을 플랫폼별로 태깅·번역·전략 운영.
+- **AI미래학자 박성우** — 실재 AI·기술 신호를 미래예측 SF로 짓는 시그니처 모드(`AI FORESIGHT` 렌즈 주입).
+
+> 박성우(AI FUTURE STREAMER)의 `AI FORESIGHT` 관점은 이제 전체 제품의 정체성이 아니라, 전 장르 제작 위에 얹힌 **하나의 시그니처 모드**로 재배치되었습니다.
 
 <sub>Node.js 18+ · Zero-dependency backend · Anthropic Claude (Opus / Sonnet / Haiku) · Made by **Park Seong-Woo (박성우)**</sub>
 
@@ -370,14 +374,17 @@ server.js          HTTP 서버 · SSE · REST 라우팅 · 정적 서빙
 
 오케스트레이터가 `dependsOn`을 분석해 같은 단계의 에이전트(Plot·OSMU)는 병렬로 실행하고, 앞 단계 산출물을 다음 단계 프롬프트에 주입합니다.
 
-### 두 개의 스튜디오 — 제작실 + 운영실
+### 세 개의 스튜디오 — 제작실 · 운영실 · AI미래학자 박성우
 
-상단 토글로 **제작실(Production)** 과 **운영실(Operations)** 을 전환합니다. `deep-research-report2.md`의 결론 — *"이 에이전트는 ‘좋은 SF를 생성하는 모델’이 아니라, 플랫폼별 취향·규칙·노출 구조를 학습해 SF를 패키징·운영하는 시스템이어야 한다"* — 을 반영해, 생성(Narrative Intelligence)과 운영(Platform Intelligence)을 분리했습니다. 누가 쓰고 무엇이 갱신됐는지는 [`OPERATIONS-STUDIO.md`](OPERATIONS-STUDIO.md) 참고.
+상단 토글로 세 스튜디오를 전환합니다. 생성(Narrative Intelligence)과 운영(Platform Intelligence)을 분리하고, AI 미래예측 SF를 별도의 **시그니처 모드**로 재배치했습니다. 운영실 관련 상세는 [`OPERATIONS-STUDIO.md`](OPERATIONS-STUDIO.md) 참고.
 
-| 스튜디오 | 역할 | 에이전트 |
+| 스튜디오 | 역할 | 에이전트 / 특징 |
 |---|---|---|
-| 제작실 (Narrative Intelligence) | 프리미스 → 연재 IP 생성 | Foresight · 세계관 · Plot · Draft · Reader · OSMU |
-| 운영실 (Platform Intelligence) | 같은 작품을 플랫폼별로 태깅·번역·운영 | 자동 태깅기 · 반응 분석기 · 플랫폼 적합도 · 플랫폼 번역기 · 전략 리포터 |
+| **제작실** (Narrative Intelligence) | 전 장르 아이디어 → 연재 IP 생성(기본) | Foresight · 세계관 · Plot · Draft · Reader · OSMU |
+| **운영실** (Platform Intelligence) | 같은 작품을 플랫폼별로 태깅·번역·운영 | 자동 태깅기 · 반응 분석기 · 플랫폼 적합도 · 플랫폼 번역기 · 전략 리포터 |
+| **AI미래학자 박성우** (AI Foresight) | 실재 AI·기술 신호 → 미래예측 SF IP | 제작 파이프라인 재사용 + 전 에이전트에 `AI FORESIGHT 렌즈` 주입, 장르 SF 고정 |
+
+> 제작실과 박성우 모드는 동일한 6-에이전트 제작 파이프라인(`pipeline=production`)을 공유합니다. 차이는 박성우 모드가 SF 장르로 고정되고, 입력에 `foresight: true` 신호가 실려 모든 에이전트 프롬프트에 미래예측 렌즈가 주입된다는 점입니다. 운영실만 `pipeline=platform`을 사용합니다.
 
 운영실 5 에이전트는 6층 태깅 분류체계, HFY/Royal Road/Webnovel/네이버/카카오 플랫폼 규칙, 한국형 SF 오버레이, 성공식/실패식을 `lib/platform-intel.js`에 구조화 데이터로 인코딩해 동작합니다. 입력은 작품 제목·시놉시스·핵심 태그·타깃 플랫폼·샘플 챕터·붙여넣은 리뷰이며, `POST /api/run`에 `pipeline: "platform"`로 전달됩니다. 키가 없어도 운영실 전용 결정론적 폴백(`lib/platform-local.js`)으로 데모가 동작합니다.
 

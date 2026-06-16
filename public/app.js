@@ -21,9 +21,18 @@ const PLATFORM_AGENTS = [
   { id: "strategy", name: "전략 리포터", tab: "전략", sub: "성공식·KPI·주간 액션" },
 ];
 
-const STUDIOS = { production: PRODUCTION_AGENTS, platform: PLATFORM_AGENTS };
+// foresight(AI미래학자 박성우) 모드는 제작 파이프라인을 재사용하되, SF 장르 기본 +
+// 모든 에이전트에 'AI FORESIGHT 렌즈'를 주입하는 시그니처 모드다.
+const STUDIOS = { production: PRODUCTION_AGENTS, platform: PLATFORM_AGENTS, foresight: PRODUCTION_AGENTS };
 // 현재 스튜디오의 에이전트 목록. 토글 시 교체된다(아래 렌더 함수들이 모두 참조).
 let AGENTS = PRODUCTION_AGENTS;
+
+// 스튜디오별 표시 메타. production/foresight는 같은 제작 파이프라인을 쓴다.
+const STUDIO_META = {
+  production: { title: "웹소설 제작실", eyebrow: "Webnovel IP Production OS", brand: "전 장르 웹소설 IP 에이전트", run: "에이전트 실행", status: "제작실", toast: "제작실로 전환했습니다." },
+  platform: { title: "플랫폼 운영실", eyebrow: "Platform Intelligence OS", brand: "플랫폼 태깅·번역·전략 운영실", run: "운영 분석 실행", status: "운영실", toast: "운영실(Platform Intelligence)로 전환했습니다." },
+  foresight: { title: "AI미래학자 박성우 · AI FORESIGHT", eyebrow: "AI Foresight SF Studio", brand: "AI미래학자 박성우의 미래예측 SF 스튜디오", run: "AI FORESIGHT 실행", status: "박성우 모드", toast: "AI미래학자 박성우 모드로 전환했습니다. 장르를 SF로 맞췄습니다." },
+};
 
 // 장르 패밀리에 따라 SF 전용 필드 라벨을 전환한다.
 const FIELD_LABELS = {
@@ -116,7 +125,8 @@ const EXAMPLE = {
 const DEFAULTS = Object.fromEntries(
   SELECTORS.map((id) => [id, ["webtoonBranch", "globalBranch", "fanCommunity"].includes(id)]),
 );
-Object.assign(DEFAULTS, { genre: "aiForesight", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "2041" });
+// 범용 웹소설 제작실이 기본. 박성우(foresight) 모드 진입 시에만 SF(aiForesight)로 전환된다.
+Object.assign(DEFAULTS, { genre: "romanceFantasy", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "" });
 ["ipTitle", "targetReader", "logline", "sfPremise", "coreTech", "scienceConstraint",
  "socialShift", "protagonist", "desire", "aiEntity", "antagonist", "worldRule",
  "seasonGoal", "tone", "manuscript", "feedback", "coreTags", "subgenre",
@@ -265,24 +275,38 @@ function applyStudioLabels(ops) {
   set("feedback", ops ? "붙여넣은 리뷰 / 댓글" : "댓글 / 지표");
 }
 
-// 제작실 ↔ 운영실 전환: 에이전트 목록·입력 패널·탭을 통째로 스왑한다.
+// 제작실 ↔ 운영실 ↔ 박성우(foresight) 전환: 에이전트 목록·입력 패널·탭을 통째로 스왑한다.
 function setStudio(studio, opts = {}) {
   if (!STUDIOS[studio]) return;
   state.studio = studio;
   AGENTS = STUDIOS[studio];
   const ops = studio === "platform";
+  const fore = studio === "foresight";
+  const meta = STUDIO_META[studio];
 
   document.querySelectorAll(".studio-btn").forEach((b) =>
     b.classList.toggle("active", b.dataset.studio === studio));
+  // 제작 입력(prod-only)은 production·foresight에서 보이고, 운영(ops-only)은 platform에서만.
   document.querySelectorAll(".prod-only").forEach((n) => { n.hidden = ops; });
   document.querySelectorAll(".ops-only").forEach((n) => { n.hidden = !ops; });
+  document.querySelectorAll(".foresight-only").forEach((n) => { n.hidden = !fore; });
+  document.body.classList.toggle("studio-foresight", fore);
   applyStudioLabels(ops);
 
   const runLabel = el("runAgent")?.querySelector("span:last-child");
-  if (runLabel) runLabel.textContent = ops ? "운영 분석 실행" : "SF Agent 실행";
-  el("workspaceTitle").textContent = ops
-    ? "플랫폼 운영실"
-    : (el("ipTitle").value || "AI 미래 SF 제작실");
+  if (runLabel) runLabel.textContent = meta.run;
+  if (el("brandEyebrow")) el("brandEyebrow").textContent = meta.brand;
+  if (el("workspaceEyebrow")) el("workspaceEyebrow").textContent = meta.eyebrow;
+  el("workspaceTitle").textContent = ops ? meta.title : (el("ipTitle").value || meta.title);
+
+  // 박성우 모드 진입 시 장르를 SF(미래예측)로 맞추고 적응형 라벨을 갱신한다.
+  if (fore) {
+    const g = el("genre");
+    if (g && g.value !== "aiForesight" && g.querySelector('option[value="aiForesight"]')) {
+      g.value = "aiForesight";
+      onGenreChange(false);
+    }
+  }
 
   AGENTS.forEach((a) => { if (!(a.id in state.statuses)) state.statuses[a.id] = "idle"; });
   renderAgentGrid();
@@ -290,8 +314,8 @@ function setStudio(studio, opts = {}) {
   setActiveTab(AGENTS[0].id);
   localStorage.setItem("sfAgentStudio", studio);
   if (!opts.silent) {
-    el("runStatus").textContent = ops ? "운영실" : "제작실";
-    toast(ops ? "운영실(Platform Intelligence)로 전환했습니다." : "제작실로 전환했습니다.", "info");
+    el("runStatus").textContent = meta.status;
+    toast(meta.toast, "info");
   }
 }
 
@@ -322,6 +346,8 @@ function collectInput() {
     .map((n) => n.dataset.platform)
     .join(",");
   input.studio = state.studio;
+  // 박성우(foresight) 모드: 모든 에이전트에 'AI FORESIGHT 렌즈'를 주입하도록 백엔드에 신호.
+  input.foresight = state.studio === "foresight";
   // 연재 플랫폼: 다중 선택(미선택 가능). platform은 하위호환용 첫 항목.
   input.platforms = PLATFORM_PF
     .filter((pf) => { const n = document.querySelector(`#platformChecks [data-pf="${pf}"]`); return n && n.checked; })
@@ -577,7 +603,7 @@ function renderActiveTab() {
   }
 
   if (!buffer && st === "idle") {
-    panel.innerHTML = `<div class="empty-state">‘${state.studio === "platform" ? "운영 분석 실행" : "SF Agent 실행"}’을 누르면 <strong>${AGENTS.find((a) => a.id === id)?.name}</strong> 산출물이 여기에 실시간으로 생성됩니다.</div>`;
+    panel.innerHTML = `<div class="empty-state">‘${(STUDIO_META[state.studio] || STUDIO_META.production).run}’을 누르면 <strong>${AGENTS.find((a) => a.id === id)?.name}</strong> 산출물이 여기에 실시간으로 생성됩니다.</div>`;
     return;
   }
 
@@ -986,7 +1012,7 @@ function draftStudioHtml() {
 
   let body;
   if (!nums.length) {
-    body = `<div class="empty-state">위에서 <strong>SF Agent 실행</strong>으로 1화 오프닝을 먼저 만들거나, <strong>다음 1화 생성</strong>으로 1화부터 시작하세요. 좋으면 다음 화를 이어서 생성합니다.</div>`;
+    body = `<div class="empty-state">위에서 <strong>${(STUDIO_META[state.studio] || STUDIO_META.production).run}</strong>으로 1화 오프닝을 먼저 만들거나, <strong>다음 1화 생성</strong>으로 1화부터 시작하세요. 좋으면 다음 화를 이어서 생성합니다.</div>`;
   } else {
     body = nums.map((n) => {
       const streaming = state.chapterRunning && state.streamingChapter === n;
@@ -1773,9 +1799,9 @@ async function openProject(id) {
     const p = data.project;
     state.currentProjectId = p.id;
     // 저장된 스튜디오로 먼저 전환해 입력 패널/탭을 맞춘다.
-    setStudio(p.input?.studio === "platform" ? "platform" : "production", { silent: true });
+    setStudio(STUDIOS[p.input?.studio] ? p.input.studio : "production", { silent: true });
     fillForm(p.input || {});
-    if (state.studio === "production") onGenreChange(false); // 장르 라벨 적용
+    if (state.studio !== "platform") onGenreChange(false); // 장르 라벨 적용(제작·박성우)
     resetRun();
     if (p.report?.agents) {
       Object.values(p.report.agents).forEach((a) => {
@@ -1791,7 +1817,7 @@ async function openProject(id) {
     }
     state.score = p.score ?? 0;
     el("readinessChip").textContent = `제작도 ${state.score}%`;
-    el("workspaceTitle").textContent = p.title || (state.studio === "platform" ? "플랫폼 운영실" : "AI 미래 SF 제작실");
+    el("workspaceTitle").textContent = p.title || (STUDIO_META[state.studio] || STUDIO_META.production).title;
     setActiveTab(AGENTS[0].id);
     toast("프로젝트를 불러왔습니다.", "success");
   } catch (err) {
@@ -1803,8 +1829,10 @@ function newProject() {
   state.currentProjectId = "";
   el("projectSelect").value = "";
   fillForm(DEFAULTS);
-  if (state.studio === "production") onGenreChange(false); // 적응형 라벨 갱신
-  el("workspaceTitle").textContent = state.studio === "platform" ? "플랫폼 운영실" : "웹소설 제작실";
+  // 박성우 모드면 SF 장르를 유지/복원한다.
+  if (state.studio === "foresight") { const g = el("genre"); if (g) g.value = "aiForesight"; }
+  if (state.studio !== "platform") onGenreChange(false); // 적응형 라벨 갱신(제작·박성우)
+  el("workspaceTitle").textContent = (STUDIO_META[state.studio] || STUDIO_META.production).title;
   state.score = 0;
   el("readinessChip").textContent = "제작도 0%";
   resetRun();
@@ -1909,11 +1937,13 @@ function boot() {
   renderAgentGrid();
   renderTabs();
 
+  // 첫 진입은 범용 빈 폼(DEFAULTS)으로 시작한다. 장르별 예시는 '예시' 버튼,
+  // AI 미래예측 SF 데모는 'AI미래학자 박성우' 모드에서 불러온다.
   const saved = localStorage.getItem("sfAgentInput");
   if (saved) {
-    try { fillForm(JSON.parse(saved)); } catch { fillForm(EXAMPLE); }
+    try { fillForm(JSON.parse(saved)); } catch { fillForm(DEFAULTS); }
   } else {
-    fillForm(EXAMPLE);
+    fillForm(DEFAULTS);
   }
 
   el("runAgent").addEventListener("click", runAgent);
@@ -1963,9 +1993,10 @@ function boot() {
   loadProjects();
   // 초기 장르에 맞춰 라벨만 적용 (프리셋은 덮어쓰지 않음)
   onGenreChange(false);
-  // 마지막으로 쓰던 스튜디오 복원
-  if (localStorage.getItem("sfAgentStudio") === "platform") {
-    setStudio("platform", { silent: true });
+  // 마지막으로 쓰던 스튜디오 복원 (production·platform·foresight)
+  const savedStudio = localStorage.getItem("sfAgentStudio");
+  if (savedStudio && STUDIOS[savedStudio] && savedStudio !== "production") {
+    setStudio(savedStudio, { silent: true });
   }
 }
 

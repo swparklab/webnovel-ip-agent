@@ -3,23 +3,24 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SF WebNovel Future Agent</title>
+    <title>웹소설 IP 에이전트 · Webnovel IP Agent</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <div class="app-shell">
-      <aside class="input-panel" aria-label="SF 웹소설 제작 입력 패널">
+      <aside class="input-panel" aria-label="웹소설 IP 제작 입력 패널">
         <div class="brand-row">
           <div>
-            <p class="eyebrow">AI Future Streamer · 박성우</p>
-            <h1>SF WebNovel Future Agent</h1>
+            <p class="eyebrow" id="brandEyebrow">전 장르 웹소설 IP 에이전트</p>
+            <h1>웹소설 IP 에이전트</h1>
           </div>
           <span class="status-pill" id="runStatus">대기</span>
         </div>
 
         <div class="studio-switch" role="tablist" aria-label="스튜디오 전환">
-          <button class="studio-btn active" id="studioProduction" type="button" data-studio="production" title="작품을 생성하는 제작실">제작실</button>
+          <button class="studio-btn active" id="studioProduction" type="button" data-studio="production" title="아이디어를 연재 웹소설 IP로 생성하는 제작실">제작실</button>
           <button class="studio-btn" id="studioPlatform" type="button" data-studio="platform" title="플랫폼별 태깅·번역·전략 운영실">운영실</button>
+          <button class="studio-btn" id="studioForesight" type="button" data-studio="foresight" title="AI 미래학자 박성우의 AI FORESIGHT 렌즈로 SF 웹소설을 짓는 시그니처 모드">AI미래학자 박성우</button>
         </div>
 
         <div class="project-bar">
@@ -34,14 +35,21 @@
         </div>
 
         <div class="toolbar" aria-label="주요 명령">
-          <button class="command primary" id="runAgent" type="button" title="SF Agent 실행">
+          <button class="command primary" id="runAgent" type="button" title="에이전트 실행">
             <span class="dot"></span>
-            <span>SF Agent 실행</span>
+            <span>에이전트 실행</span>
           </button>
           <button class="command ghost" id="stopAgent" type="button" hidden title="실행 중단">중단</button>
           <button class="icon-command" id="loadExample" type="button" title="예시 입력">예시</button>
           <button class="icon-command" id="exportMarkdown" type="button" title="리포트 내보내기">⬇</button>
           <button class="icon-command" id="resetForm" type="button" title="초기화">↺</button>
+        </div>
+
+        <!-- AI미래학자 박성우 시그니처 모드 안내 (foresight 전용) -->
+        <div class="form-section foresight-intro foresight-only" hidden>
+          <p class="section-note">🛰️ AI미래학자 박성우 모드 · AI FORESIGHT</p>
+          <p class="persona-line">실재하는 <strong>AI·미래 기술 신호</strong>를 근거로 가까운 미래를 추정해, 개연성 있는 <strong>SF 웹소설 IP</strong>로 변환하는 시그니처 모드입니다. 장르는 SF 계열로 맞춰지고, 모든 에이전트에 <strong>AI FORESIGHT 렌즈</strong>가 주입됩니다.</p>
+          <p class="section-hint">일반 장르 작품은 <strong>제작실</strong>에서 만드세요. 이 모드는 미래예측 기반 SF에 특화됩니다.</p>
         </div>
 
         <form id="agentForm" class="agent-form">
@@ -266,8 +274,8 @@
       <main class="workspace">
         <section class="workspace-head" aria-label="Agent 요약">
           <div>
-            <p class="eyebrow">AI Future SF Production OS</p>
-            <h2 id="workspaceTitle">AI 미래 SF 제작실</h2>
+            <p class="eyebrow" id="workspaceEyebrow">Webnovel IP Production OS</p>
+            <h2 id="workspaceTitle">웹소설 제작실</h2>
           </div>
           <div class="head-actions">
             <label class="model-pick">
@@ -287,14 +295,14 @@
 
         <section class="agent-grid" aria-label="Agent 상태" id="agentGrid"></section>
 
-        <section class="output-workbench" aria-label="SF Agent 출력">
+        <section class="output-workbench" aria-label="에이전트 출력">
           <div class="tabs" role="tablist" id="tabBar"></div>
           <div id="outputPanel" class="output-panel" aria-live="polite"></div>
         </section>
 
         <footer class="app-footer" aria-label="제작 정보">
-          <span class="footer-brand">AI Future Streamer <strong>박성우</strong></span>
-          <span class="footer-meta">SF WebNovel Future Agent · AI Future SF Production OS</span>
+          <span class="footer-brand">Webnovel IP Agent · <strong>박성우</strong></span>
+          <span class="footer-meta">웹소설 IP 에이전트 · 전 장르 제작 · 운영 · AI FORESIGHT</span>
         </footer>
       </main>
     </div>
