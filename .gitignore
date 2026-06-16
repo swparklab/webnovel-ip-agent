@@ -12,6 +12,7 @@ secret/**
 
 # 특허 초안 — 출원 전 비공개 (커밋/업로드 금지)
 patent.md
+patent-web-novel.md
 
 # Claude Code local settings
 .claude/settings.local.json
