@@ -132,6 +132,24 @@ function reportToMarkdown(record) {
   return lines.join("\n");
 }
 
+/* ---- 공통 SSE 스트리밍 헬퍼: JSON 응답 대신 SSE로 텍스트를 실시간 전달한다. ----
+ * 사용: handleTool / handleSample / handleOutline 처럼 LLM 생성이 길어
+ * HTTP 응답 지연이 체감되는 단발 엔드포인트에 적용.
+ * 이벤트: delta(text), done(full) — 클라이언트는 delta를 이어붙이고 done에서 확정.
+ */
+function streamingReply(res, req) {
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream; charset=utf-8",
+    "Cache-Control": "no-store, no-transform",
+    Connection: "keep-alive",
+    "X-Accel-Buffering": "no",
+  });
+  const emit = (type, data) => { res.write(`event: ${type}\ndata: ${JSON.stringify(data)}\n\n`); };
+  const controller = new AbortController();
+  req.on("close", () => controller.abort());
+  return { emit, signal: controller.signal };
+}
+
 /* ----------------------------- API handlers ----------------------------- */
 
 async function handleRun(req, res) {
@@ -323,7 +341,40 @@ async function handleOutline(req, res) {
   }
 }
 
-// AI 글쓰기 도구: 브레인스토밍·묘사·다시쓰기·확장·압축·이름. 단발 응답.
+// 방향 비교용 1화 도입부 샘플 생성(가중치 주입). 짧은 단발 응답.
+async function handleSample(req, res) {
+  const payload = await readJson(req);
+  const input = payload.input || {};
+  const model = payload.model || config.defaultModel;
+
+  const provider = resolveMode();
+  const localSample = () => {
+    const hero = String(input.protagonist || "주인공").split(/[,，(]/)[0].trim() || "주인공";
+    return `${input.logline || `${hero}의 평범한 하루가 한순간에 무너졌다.`}\n\n${hero}은(는) 숨을 골랐다. 돌이킬 수 없는 일이 막 시작되려 하고 있었다.\n\n> (로컬 폴백 미리보기 — 키/구독 연결 시 실제 도입부가 생성됩니다.)`;
+  };
+  // SSE 스트리밍으로 전환: cli 모드에서 응답 대기 체감을 없앤다.
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") {
+    const s = localSample(); emit("delta", { text: s }); emit("done", { ok: true, fallback: true, sample: s }); res.end(); return;
+  }
+  try {
+    const system = `너는 웹소설 본문 작가다. 아래 작품의 '1화 도입부(첫 장면)'를 약 500자로 쓴다. 강렬한 훅으로 시작하고, 설정을 나열하지 말고 장면·대사·내면으로 보여준다. 위 '서사 가중치'가 있으면 그 비중대로 톤·속도·강조를 맞춘다. 한국어, 본문만.`;
+    const user = `${buildInputBlock(input)}\n\n위 작품의 1화 도입부 첫 장면을 약 500자로 써라.`;
+    let acc = "";
+    const { text } = await streamMessage({
+      provider, model, system, signal,
+      messages: [{ role: "user", content: user }],
+      temperature: steeringTemperature(input.steering, 0.85), maxTokens: 1200,
+      onText: (chunk) => { acc += chunk; emit("delta", { text: chunk }); },
+    });
+    const full = (text || acc).trim() || localSample();
+    emit("done", { ok: true, sample: full });
+  } catch (err) {
+    if (err?.name !== "AbortError") { const s = localSample(); emit("done", { ok: true, fallback: true, sample: s, note: err?.message }); }
+  } finally { res.end(); }
+}
+
+// AI 글쓰기 도구: SSE 스트리밍으로 실시간 전달 (cli 응답 대기 체감 제거).
 async function handleTool(req, res) {
   const payload = await readJson(req);
   const tool = String(payload.tool || "");
@@ -335,20 +386,24 @@ async function handleTool(req, res) {
   if (TOOLS[tool].needsText && !text.trim()) return sendJson(res, 400, { ok: false, error: "내용을 입력하세요." });
 
   const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
   if (provider === "local") {
-    return sendJson(res, 200, { ok: true, fallback: true, result: localTool({ tool, text, mode }) });
+    const r = localTool({ tool, text, mode }); emit("delta", { text: r }); emit("done", { ok: true, fallback: true, result: r }); res.end(); return;
   }
   try {
     const { system, user } = buildToolPrompt({ tool, text, mode, ctx });
+    let acc = "";
     const { text: out } = await streamMessage({
-      provider, model, system,
+      provider, model, system, signal,
       messages: [{ role: "user", content: user }],
       temperature: 0.8, maxTokens: 1800,
+      onText: (chunk) => { acc += chunk; emit("delta", { text: chunk }); },
     });
-    return sendJson(res, 200, { ok: true, result: (out || "").trim() || localTool({ tool, text, mode }) });
+    const full = (out || acc).trim() || localTool({ tool, text, mode });
+    emit("done", { ok: true, result: full });
   } catch (err) {
-    return sendJson(res, 200, { ok: true, fallback: true, result: localTool({ tool, text, mode }), note: err?.message });
-  }
+    if (err?.name !== "AbortError") { const r = localTool({ tool, text, mode }); emit("done", { ok: true, fallback: true, result: r, note: err?.message }); }
+  } finally { res.end(); }
 }
 
 // AI 임팩트 리포트: 날것 아이디어 → Before/After 진단(JSON). 솔루션 가치를 체감시킨다. SSE 아님.
@@ -644,6 +699,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/tool") {
     return handleTool(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/sample") {
+    return handleSample(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/outline") {

@@ -169,6 +169,7 @@ const state = {
   audit: null,           // 완성도 심사 결과
   auditBusy: false,
   lastImpact: null,      // 마지막 AI 임팩트 리포트(Before/After) 결과
+  abBusy: false,         // A/B 비교 생성 진행 중
   memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
   memoryBusy: {},        // n -> 메모리 생성 중 여부
   memoryOpen: false,     // 스토리 바이블 패널 펼침 여부
@@ -2144,7 +2145,9 @@ async function runTool() {
   btn.disabled = true;
   label.textContent = "생성 중…";
   el("toolResult").hidden = false;
-  el("toolResult").innerHTML = `<div class="impact-loading"><span class="dot"></span> AI가 생성 중…</div>`;
+  // 스트리밍: 결과가 실시간으로 쌓인다.
+  el("toolResult").innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${def.label}</span></div><div class="md-output" id="toolStream"></div>`;
+  const streamEl = el("toolStream");
 
   try {
     const res = await fetch("/api/tool", {
@@ -2152,28 +2155,144 @@ async function runTool() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tool, text, mode, ctx, model: el("modelSelect").value }),
     });
-    const data = await res.json();
-    if (!data.ok) throw new Error(data.error || "생성 실패");
-    state.lastToolResult = data.result || "";
+    if (!res.body) throw new Error("스트리밍 미지원");
+    const reader = res.body.getReader(); const dec = new TextDecoder();
+    let buf = ""; let acc = ""; let fallback = false;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf("\n\n")) !== -1) {
+        const raw = buf.slice(0, sep); buf = buf.slice(sep + 2);
+        let type = "message"; let dataLine = "";
+        raw.split("\n").forEach((l) => { if (l.startsWith("event:")) type = l.slice(6).trim(); else if (l.startsWith("data:")) dataLine += l.slice(5).trim(); });
+        if (!dataLine) continue;
+        let d; try { d = JSON.parse(dataLine); } catch { continue; }
+        if (type === "delta" && d.text) { acc += d.text; if (streamEl) streamEl.innerHTML = window.renderMarkdown(acc) + '<span class="cursor"></span>'; }
+        if (type === "done") { if (d.result) acc = d.result; if (d.fallback) fallback = true; }
+      }
+    }
+    state.lastToolResult = acc;
+    if (streamEl) streamEl.innerHTML = window.renderMarkdown(acc);
+    // 복사 버튼
     el("toolResult").innerHTML =
       `<div class="tool-result-actions">
-        <span class="tool-result-tag">${def.label}${data.fallback ? " · 폴백" : ""}</span>
+        <span class="tool-result-tag">${def.label}${fallback ? " · 폴백" : ""}</span>
         <button class="mini" id="toolCopy" type="button">📋 복사</button>
        </div>
-       <div class="md-output">${window.renderMarkdown(data.result || "")}</div>`;
-    const copy = el("toolCopy");
-    if (copy) copy.addEventListener("click", () => {
-      navigator.clipboard.writeText(state.lastToolResult).then(
-        () => toast("복사했습니다.", "success"),
-        () => toast("복사 실패 — 직접 선택해 복사하세요.", "warn"),
-      );
-    });
+       <div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    el("toolCopy")?.addEventListener("click", () =>
+      navigator.clipboard.writeText(state.lastToolResult).then(() => toast("복사했습니다.", "success"), () => toast("직접 선택해 복사하세요.", "warn")));
   } catch (err) {
     el("toolResult").innerHTML = `<div class="impact-loading">생성 실패: ${escapeHtml(err.message || "")}</div>`;
   } finally {
     btn.disabled = false;
     label.textContent = prev;
   }
+}
+
+/* ----------------------- ⚖️ 방향 비교 A/B ----------------------- */
+
+function openAbModal() {
+  el("abModal").hidden = false;
+  document.body.classList.add("modal-open");
+  renderAbControls();
+  // 처음엔 아직 생성 전 상태 유지 (버튼 눌러야 생성)
+}
+
+function closeAbModal() {
+  el("abModal").hidden = true;
+  document.body.classList.remove("modal-open");
+  state.abBusy = false;
+}
+
+// B 방향으로 쓸 프리셋 선택기 렌더
+function renderAbControls() {
+  const host = el("abControls");
+  if (!host) return;
+  const presetOpts = Object.entries(STEER_PRESETS)
+    .map(([k, p]) => `<option value="${k}">${p.label}</option>`).join("");
+  host.innerHTML = `
+    <label class="ab-pick">A 방향: <span id="abCurLabel" class="ab-cur-label">${steeringSummaryText()}</span> <span class="ab-cur-hint">(현재 다이얼 값)</span></label>
+    <label class="ab-pick">B 방향:
+      <select id="abPresetPick">${presetOpts}</select>
+    </label>
+    <button class="command primary" id="abRunBtn" type="button"><span class="dot"></span><span>두 방향 동시 생성</span></button>`;
+  el("abRunBtn").addEventListener("click", runAbCompare);
+}
+
+async function runAbCompare() {
+  if (state.abBusy) return;
+  const bPreset = STEER_PRESETS[el("abPresetPick").value] || STEER_PRESETS.speed;
+  const input = collectInput();
+  if (!input.logline && !input.protagonist && !input.ipTitle) {
+    toast("먼저 Core IP(제목·로그라인·주인공)를 채워 주세요.", "warn"); return;
+  }
+  state.abBusy = true;
+  const btn = el("abRunBtn");
+  if (btn) { btn.disabled = true; btn.querySelector("span:last-child").textContent = "생성 중…"; }
+
+  // A = 현재 다이얼, B = 선택한 프리셋
+  const aWeights = readSteering();
+  const bWeights = bPreset.weights;
+  const aLabel = steeringSummaryText();
+  const bLabel = bPreset.label;
+
+  el("abTagA").textContent = aLabel;
+  el("abTagB").textContent = bLabel;
+  el("abBodyA").innerHTML = `<div class="impact-loading"><span class="dot"></span>A 방향 생성 중…</div>`;
+  el("abBodyB").innerHTML = `<div class="impact-loading"><span class="dot"></span>B 방향 생성 중…</div>`;
+  el("abApplyA").hidden = true; el("abApplyB").hidden = true;
+  el("abColA").dataset.weights = JSON.stringify(aWeights);
+  el("abColB").dataset.weights = JSON.stringify(bWeights);
+
+  const model = el("modelSelect").value || state.config.defaultModel;
+  // SSE 샘플 스트리밍 — 생성 중에 해당 칸을 실시간으로 업데이트.
+  const fetchSample = async (steering, bodyEl) => {
+    const res = await fetch("/api/sample", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: { ...input, steering }, model }),
+    });
+    if (!res.body) return { ok: false };
+    const reader = res.body.getReader(); const dec = new TextDecoder();
+    let buf = ""; let acc = ""; let done2 = {};
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += dec.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf("\n\n")) !== -1) {
+        const raw = buf.slice(0, sep); buf = buf.slice(sep + 2);
+        let type = ""; let dl = "";
+        raw.split("\n").forEach((l) => { if (l.startsWith("event:")) type = l.slice(6).trim(); else if (l.startsWith("data:")) dl += l.slice(5).trim(); });
+        if (!dl) continue;
+        let d; try { d = JSON.parse(dl); } catch { continue; }
+        if (type === "delta" && d.text) { acc += d.text; if (bodyEl) bodyEl.innerHTML = `<div class="md-output ab-sample">${window.renderMarkdown(acc)}<span class="cursor"></span></div>`; }
+        if (type === "done") done2 = d;
+      }
+    }
+    return { ok: true, sample: done2.sample || acc, fallback: !!done2.fallback };
+  };
+
+  const [rA, rB] = await Promise.all([fetchSample(aWeights, el("abBodyA")), fetchSample(bWeights, el("abBodyB"))]);
+  el("abBodyA").innerHTML = `<div class="md-output ab-sample">${window.renderMarkdown(rA.sample || "(생성 실패)")}</div>`;
+  el("abBodyB").innerHTML = `<div class="md-output ab-sample">${window.renderMarkdown(rB.sample || "(생성 실패)")}</div>`;
+  el("abApplyA").hidden = false; el("abApplyB").hidden = false;
+
+  if (btn) { btn.disabled = false; btn.querySelector("span:last-child").textContent = "다시 생성"; }
+  state.abBusy = false;
+  toast("A/B 비교 생성 완료. 마음에 드는 방향을 적용하세요.", "success");
+}
+
+function applyAbWeights(side) {
+  const col = el(side === "A" ? "abColA" : "abColB");
+  const weights = JSON.parse(col?.dataset.weights || "{}");
+  if (!weights || !Object.keys(weights).length) return;
+  setSteering(weights);
+  closeAbModal();
+  toast(`방향 ${side} 가중치를 적용했습니다. 이후 생성이 이 방향으로 이어집니다.`, "success");
+  updateJourney();
 }
 
 /* ------------------------------ Projects -------------------------------- */
@@ -2399,6 +2518,13 @@ function boot() {
   // AI 글쓰기 도구상자
   el("toolboxBtn").addEventListener("click", () => openToolbox());
   el("toolClose").addEventListener("click", closeToolbox);
+  // A/B 방향 비교
+  el("abCompareBtn").addEventListener("click", openAbModal);
+  el("abClose").addEventListener("click", closeAbModal);
+  el("abModal").addEventListener("click", (e) => { if (e.target === el("abModal")) closeAbModal(); });
+  el("abApplyA").addEventListener("click", () => applyAbWeights("A"));
+  el("abApplyB").addEventListener("click", () => applyAbWeights("B"));
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el("abModal").hidden) closeAbModal(); });
   el("toolModal").addEventListener("click", (e) => { if (e.target === el("toolModal")) closeToolbox(); });
   el("toolRun").addEventListener("click", runTool);
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el("toolModal").hidden) closeToolbox(); });

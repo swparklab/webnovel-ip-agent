@@ -510,3 +510,22 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .steer-ends { display: flex; justify-content: space-between; }
 .steer-ends i { font-style: normal; font-size: 0.68rem; color: var(--line-strong); }
 @media (max-width: 480px) { .steer-dials { grid-template-columns: 1fr; } }
+
+/* ----- ⚖️ 방향 비교 A/B 모달 ----- */
+.ab-modal { max-width: 860px; }
+.ab-header { margin-bottom: 14px; }
+.ab-eyebrow { font-size: 0.82rem; font-weight: 900; color: var(--violet); }
+.ab-desc { font-size: 0.86rem; color: var(--muted); margin: 4px 0 0; }
+.ab-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.ab-col { border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; }
+.ab-col-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: var(--surface-2); }
+.ab-label { font-weight: 900; font-size: 1rem; color: var(--violet); }
+.ab-tag { font-size: 0.8rem; font-weight: 800; color: var(--muted); flex: 1; }
+.ab-col-body { padding: 10px 12px; min-height: 140px; max-height: 50vh; overflow-y: auto; }
+.ab-sample { font-size: 0.9rem; line-height: 1.7; }
+.ab-controls { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+.ab-pick { display: flex; align-items: center; gap: 6px; font-size: 0.86rem; font-weight: 700; }
+.ab-pick select { min-height: 38px; }
+.ab-cur-label { font-weight: 900; color: var(--violet); }
+.ab-cur-hint { color: var(--muted); font-size: 0.76rem; }
+@media (max-width: 600px) { .ab-cols { grid-template-columns: 1fr; } }

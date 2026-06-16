@@ -89,6 +89,7 @@
             <p class="section-hint">같은 재료라도 <strong>어디에 무게를 두느냐</strong>로 작품 방향이 갈립니다. 프리셋을 고르거나 다이얼로 조절하면, 제목·세계관·아웃라인·회차 집필에 그 비중이 반영됩니다.</p>
             <div class="steer-presets" id="steerPresets"></div>
             <div class="steer-dials" id="steerDials"></div>
+            <button class="command" id="abCompareBtn" type="button" title="현재 가중치(A)와 다른 프리셋(B)을 비교 생성">⚖️ 방향 비교 A/B</button>
           </div>
 
           <div class="form-section">
@@ -336,6 +337,36 @@
     </div>
 
     <div class="toast" id="toast" hidden></div>
+
+    <!-- ⚖️ 방향 비교 A/B 모달 -->
+    <div class="modal-backdrop" id="abModal" hidden>
+      <div class="modal-card ab-modal" role="dialog" aria-modal="true" aria-label="방향 비교 A/B">
+        <button class="modal-close" id="abClose" type="button" aria-label="닫기">✕</button>
+        <div class="ab-header">
+          <span class="ab-eyebrow">⚖️ 방향 비교 A / B</span>
+          <p class="ab-desc">같은 작품, 두 가지 가중치 방향으로 1화 도입부를 동시에 생성해 비교합니다. 마음에 드는 방향을 적용하면 이후 아웃라인·회차 집필이 그 방향으로 이어집니다.</p>
+        </div>
+        <div class="ab-cols" id="abCols">
+          <div class="ab-col" id="abColA">
+            <div class="ab-col-head">
+              <span class="ab-label" id="abLabelA">A</span>
+              <span class="ab-tag" id="abTagA">—</span>
+              <button class="mini primary" id="abApplyA" type="button" hidden>이 방향 적용</button>
+            </div>
+            <div class="ab-col-body" id="abBodyA"><div class="impact-loading">생성 전</div></div>
+          </div>
+          <div class="ab-col" id="abColB">
+            <div class="ab-col-head">
+              <span class="ab-label" id="abLabelB">B</span>
+              <span class="ab-tag" id="abTagB">—</span>
+              <button class="mini primary" id="abApplyB" type="button" hidden>이 방향 적용</button>
+            </div>
+            <div class="ab-col-body" id="abBodyB"><div class="impact-loading">생성 전</div></div>
+          </div>
+        </div>
+        <div class="ab-controls" id="abControls"></div>
+      </div>
+    </div>
 
     <!-- AI 글쓰기 도구상자 모달 -->
     <div class="modal-backdrop" id="toolModal" hidden>
