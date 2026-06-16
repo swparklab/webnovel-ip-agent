@@ -34,6 +34,10 @@ body {
 button, input, select, textarea { font: inherit; }
 button { color: inherit; }
 
+/* hidden 속성을 항상 존중한다. (.form-section{display:grid} 등 작성자 규칙이 UA의
+   [hidden]{display:none}을 덮어써, hidden 요소가 보이던 문제를 전역으로 차단) */
+[hidden] { display: none !important; }
+
 .app-shell {
   display: grid;
   grid-template-columns: minmax(320px, 392px) minmax(0, 1fr);
