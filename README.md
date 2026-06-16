@@ -1,4 +1,4 @@
-# 🚀 웹소설 IP 에이전트 (Webnovel IP Agent)
+# 🚀 웹소설 에이전트 (Webnovel Agent)
 
 > **전 장르 웹소설 IP 제작 에이전트** — 막연한 아이디어 한 줄을 연재 가능한 웹소설 IP로 바꾸는, Claude 기반 멀티에이전트 파이프라인.
 
