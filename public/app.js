@@ -1939,6 +1939,101 @@ function bindImpactActions() {
   if (dismiss) dismiss.addEventListener("click", closeImpactModal);
 }
 
+/* ------------------------ AI 글쓰기 도구상자 ------------------------ */
+
+const TOOL_DEFS = {
+  brainstorm: { label: "💡 브레인스토밍", inputLabel: "주제", ph: "예: 주인공이 정체를 들킨 다음 전개",
+    modes: { next: "다음 전개", twist: "반전", title: "제목 후보", name: "인물 이름", power: "능력·설정", conflict: "갈등·사건", free: "자유 주제" } },
+  describe: { label: "🖼️ 묘사 강화", inputLabel: "묘사할 대상/장면", ph: "예: 비 내리는 폐허가 된 마법탑" },
+  rewrite: { label: "✏️ 다시쓰기", inputLabel: "다시 쓸 문단", ph: "다시 쓸 문단을 붙여넣으세요",
+    modes: { vivid: "더 생생하게", tense: "더 긴장감 있게", concise: "더 간결하게", emotional: "감정 깊게", formal: "문어체로", casual: "구어체로" } },
+  expand: { label: "➕ 확장", inputLabel: "늘릴 문단", ph: "확장할 문단을 붙여넣으세요" },
+  shrink: { label: "➖ 압축", inputLabel: "줄일 문단", ph: "압축할 문단을 붙여넣으세요" },
+  names: { label: "🏷️ 이름 짓기", inputLabel: "요청(선택)", ph: "예: 차갑고 단단한 여검사 이름" },
+};
+const TOOL_ORDER = ["brainstorm", "describe", "rewrite", "expand", "shrink", "names"];
+
+function openToolbox(initialTool = "brainstorm", prefill = "") {
+  el("toolModal").hidden = false;
+  document.body.classList.add("modal-open");
+  el("toolTabs").innerHTML = TOOL_ORDER.map((k) =>
+    `<button class="tool-tab" type="button" data-tool="${k}">${TOOL_DEFS[k].label}</button>`).join("");
+  el("toolTabs").querySelectorAll("[data-tool]").forEach((b) =>
+    b.addEventListener("click", () => selectTool(b.dataset.tool)));
+  el("toolResult").hidden = true;
+  el("toolResult").innerHTML = "";
+  if (prefill) el("toolInput").value = prefill;
+  selectTool(initialTool);
+}
+
+function closeToolbox() {
+  el("toolModal").hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+function selectTool(key) {
+  state.tool = key;
+  const def = TOOL_DEFS[key];
+  el("toolTabs").querySelectorAll("[data-tool]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.tool === key));
+  el("toolInputLabel").textContent = def.inputLabel;
+  el("toolInput").placeholder = def.ph;
+  const sel = el("toolMode");
+  if (def.modes) {
+    sel.hidden = false;
+    sel.innerHTML = Object.entries(def.modes).map(([v, t]) => `<option value="${v}">${t}</option>`).join("");
+  } else {
+    sel.hidden = true;
+    sel.innerHTML = "";
+  }
+}
+
+async function runTool() {
+  const tool = state.tool || "brainstorm";
+  const def = TOOL_DEFS[tool];
+  const text = el("toolInput").value.trim();
+  if (def.inputLabel !== "요청(선택)" && !text) { toast("내용을 입력하세요.", "warn"); el("toolInput").focus(); return; }
+  const mode = el("toolMode").hidden ? "" : el("toolMode").value;
+  const ctx = { genre: el("genre").value, tone: el("tone")?.value || "", protagonist: el("protagonist")?.value || "" };
+
+  const btn = el("toolRun");
+  const label = btn.querySelector("span:last-child");
+  const prev = label.textContent;
+  btn.disabled = true;
+  label.textContent = "생성 중…";
+  el("toolResult").hidden = false;
+  el("toolResult").innerHTML = `<div class="impact-loading"><span class="dot"></span> AI가 생성 중…</div>`;
+
+  try {
+    const res = await fetch("/api/tool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tool, text, mode, ctx, model: el("modelSelect").value }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "생성 실패");
+    state.lastToolResult = data.result || "";
+    el("toolResult").innerHTML =
+      `<div class="tool-result-actions">
+        <span class="tool-result-tag">${def.label}${data.fallback ? " · 폴백" : ""}</span>
+        <button class="mini" id="toolCopy" type="button">📋 복사</button>
+       </div>
+       <div class="md-output">${window.renderMarkdown(data.result || "")}</div>`;
+    const copy = el("toolCopy");
+    if (copy) copy.addEventListener("click", () => {
+      navigator.clipboard.writeText(state.lastToolResult).then(
+        () => toast("복사했습니다.", "success"),
+        () => toast("복사 실패 — 직접 선택해 복사하세요.", "warn"),
+      );
+    });
+  } catch (err) {
+    el("toolResult").innerHTML = `<div class="impact-loading">생성 실패: ${escapeHtml(err.message || "")}</div>`;
+  } finally {
+    btn.disabled = false;
+    label.textContent = prev;
+  }
+}
+
 /* ------------------------------ Projects -------------------------------- */
 
 function currentReport() {
@@ -2157,6 +2252,12 @@ function boot() {
   el("impactClose").addEventListener("click", closeImpactModal);
   el("impactModal").addEventListener("click", (e) => { if (e.target === el("impactModal")) closeImpactModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el("impactModal").hidden) closeImpactModal(); });
+  // AI 글쓰기 도구상자
+  el("toolboxBtn").addEventListener("click", () => openToolbox());
+  el("toolClose").addEventListener("click", closeToolbox);
+  el("toolModal").addEventListener("click", (e) => { if (e.target === el("toolModal")) closeToolbox(); });
+  el("toolRun").addEventListener("click", runTool);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el("toolModal").hidden) closeToolbox(); });
   el("refFile").addEventListener("change", (e) => handleRefUpload(e.target.files[0]));
   // '예시' 버튼: 현재 선택된 장르의 기본 예시 프리셋을 불러온다.
   el("loadExample").addEventListener("click", () => onGenreChange(true));

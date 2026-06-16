@@ -41,6 +41,7 @@
             <span>에이전트 실행</span>
           </button>
           <button class="command ghost" id="stopAgent" type="button" hidden title="실행 중단">중단</button>
+          <button class="icon-command" id="toolboxBtn" type="button" title="AI 글쓰기 도구 (브레인스토밍·묘사·다시쓰기·확장·압축·이름)">✍️</button>
           <button class="icon-command" id="loadExample" type="button" title="예시 입력">예시</button>
           <button class="icon-command" id="exportMarkdown" type="button" title="리포트 내보내기">⬇</button>
           <button class="icon-command" id="resetForm" type="button" title="초기화">↺</button>
@@ -325,6 +326,22 @@
     </div>
 
     <div class="toast" id="toast" hidden></div>
+
+    <!-- AI 글쓰기 도구상자 모달 -->
+    <div class="modal-backdrop" id="toolModal" hidden>
+      <div class="modal-card tool-modal" role="dialog" aria-modal="true" aria-label="AI 글쓰기 도구">
+        <button class="modal-close" id="toolClose" type="button" aria-label="닫기">✕</button>
+        <div class="tool-eyebrow">✍️ AI 글쓰기 도구</div>
+        <div class="tool-tabs" id="toolTabs"></div>
+        <label class="field tool-field"><span id="toolInputLabel">내용</span>
+          <textarea id="toolInput" rows="5" placeholder=""></textarea></label>
+        <div class="tool-controls">
+          <select id="toolMode" aria-label="옵션" hidden></select>
+          <button class="command primary" id="toolRun" type="button"><span class="dot"></span><span>실행</span></button>
+        </div>
+        <div class="tool-result" id="toolResult" hidden></div>
+      </div>
+    </div>
 
     <!-- AI 임팩트 리포트 (Before → After 진단) 모달 -->
     <div class="modal-backdrop" id="impactModal" hidden>

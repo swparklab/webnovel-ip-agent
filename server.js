@@ -15,6 +15,7 @@ const { extractTextFromPdf } = require("./lib/pdf");
 const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/critique");
 const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar } = require("./lib/memory");
 const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
+const { buildToolPrompt, localTool, TOOLS } = require("./lib/tools");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
@@ -291,6 +292,34 @@ async function handleCritique(req, res) {
     return sendJson(res, 200, { ok: true, n, critique });
   } catch (err) {
     return sendJson(res, 200, { ok: true, n, critique: localCritique(input, n, chapterText), note: err?.message });
+  }
+}
+
+// AI 글쓰기 도구: 브레인스토밍·묘사·다시쓰기·확장·압축·이름. 단발 응답.
+async function handleTool(req, res) {
+  const payload = await readJson(req);
+  const tool = String(payload.tool || "");
+  const text = String(payload.text || "");
+  const mode = payload.mode || "";
+  const ctx = payload.ctx || {};
+  const model = payload.model || config.defaultModel;
+  if (!TOOLS[tool]) return sendJson(res, 400, { ok: false, error: "알 수 없는 도구입니다." });
+  if (TOOLS[tool].needsText && !text.trim()) return sendJson(res, 400, { ok: false, error: "내용을 입력하세요." });
+
+  const provider = resolveMode();
+  if (provider === "local") {
+    return sendJson(res, 200, { ok: true, fallback: true, result: localTool({ tool, text, mode }) });
+  }
+  try {
+    const { system, user } = buildToolPrompt({ tool, text, mode, ctx });
+    const { text: out } = await streamMessage({
+      provider, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.8, maxTokens: 1800,
+    });
+    return sendJson(res, 200, { ok: true, result: (out || "").trim() || localTool({ tool, text, mode }) });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, fallback: true, result: localTool({ tool, text, mode }), note: err?.message });
   }
 }
 
@@ -573,6 +602,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/impact") {
     return handleImpact(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/tool") {
+    return handleTool(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/audit") {
