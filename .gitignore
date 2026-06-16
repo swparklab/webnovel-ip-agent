@@ -10,5 +10,9 @@ data/projects/
 secret/
 secret/**
 
+# 특허/논문 초안 — 출원·투고 전 비공개 (커밋/업로드 금지)
+patent.md
+paper.md
+
 # Claude Code local settings
 .claude/settings.local.json
