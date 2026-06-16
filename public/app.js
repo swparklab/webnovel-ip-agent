@@ -172,6 +172,9 @@ const state = {
   memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
   memoryBusy: {},        // n -> 메모리 생성 중 여부
   memoryOpen: false,     // 스토리 바이블 패널 펼침 여부
+  outline: null,         // 시즌 아웃라인(기승전결 + 도파민 비트)
+  outlineOpen: false,    // 아웃라인 패널 펼침 여부
+  outlineBusy: false,    // 아웃라인 생성 중 여부
   lastRunChapters: [],   // 이번 실행에서 새로 생성한 화 번호
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
@@ -766,6 +769,7 @@ function resetRun() {
   state.errors = {};
   state.chapters = {};   // 새 파이프라인 실행 시 연속 원고도 초기화(1화가 새로 생성됨)
   state.memories = {};   // 연재 메모리도 초기화(회차가 새로 쌓이며 다시 누적)
+  state.outline = null;  // 시즌 아웃라인도 초기화(새 작품)
   state.usage = { input_tokens: 0, output_tokens: 0 };
   AGENTS.forEach((a) => { state.statuses[a.id] = "idle"; updateAgentCard(a.id); });
   updateUsage();
@@ -1139,6 +1143,7 @@ function draftStudioHtml() {
       <label class="chapter-auto" title="전자동 끝에 전체 회차를 한번 더 보완합니다">
         <input type="checkbox" id="autoFinalPass" ${state.autoFinalPass ? "checked" : ""} ${state.chapterRunning ? "disabled" : ""} /> 최종 전체보완
       </label>
+      ${!state.chapterRunning ? `<button class="mini${state.outlineOpen ? " primary" : ""}" id="outlineToggle" type="button" title="기승전결 + 도파민 비트 아웃라인을 설계해 각 회차 집필을 가이드합니다">📐 아웃라인${state.outline ? " ✓" : ""}</button>` : ""}
       ${action}
       ${canMore && !state.chapterRunning ? `<button class="command primary" id="autopilot" type="button" title="${next}~${target}화를 [생성→피드백→보완] 자동 반복 후 마무리 전체보완"><span>🤖 전자동 (~${target}화)</span></button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="critiqueAll" type="button" title="모든 회차에 자체 피드백을 한번에 생성">🔍 전체 피드백</button>` : ""}
@@ -1181,7 +1186,61 @@ function draftStudioHtml() {
       return `<article class="chapter-block">${tag}${md}${actions}${critBlock}${noteBlock}</article>`;
     }).join('<hr class="chapter-sep" />');
   }
-  return `<div class="chapter-studio">${controls}${storyMemoryHtml()}${auditPanelHtml()}<div id="chapterList">${body}</div></div>`;
+  return `<div class="chapter-studio">${controls}${outlineHtml()}${storyMemoryHtml()}${auditPanelHtml()}<div id="chapterList">${body}</div></div>`;
+}
+
+// 시즌 아웃라인 패널 — 기승전결 막 구조 + 도파민 비트 타임라인.
+const BEAT_EMOJI = { 사이다: "💥", 각성: "⚡", 반전: "🔄", 보상: "🎁", 관계: "💗", 위기: "🔥", 떡밥: "🧩", 회수: "✅" };
+function outlineHtml() {
+  if (!state.outlineOpen) return "";
+  if (state.outlineBusy) return `<div class="outline-panel"><div class="impact-loading"><span class="dot"></span> AI가 ${state.totalChapters}화 완결 기준 아웃라인을 설계 중…</div></div>`;
+  const o = state.outline;
+  const head = `<div class="ol-head">📐 시즌 아웃라인 <span class="ol-sub">${o ? `${o.total}화 완결 · 기승전결 + 도파민 비트` : "아직 없음"}</span>
+    <button class="mini primary" id="outlineGen" type="button">${o ? "🔄 다시 설계" : "✨ 아웃라인 생성"}</button>
+    <button class="mini" id="outlineClose" type="button">닫기</button></div>`;
+  if (!o) return `<div class="outline-panel">${head}<div class="ol-empty">‘완결’ 화수(${state.totalChapters}화)에 맞춰 기승전결 4막과 회차별 도파민 비트를 설계합니다. 생성하면 각 회차 집필에 자동 주입됩니다.</div></div>`;
+
+  const acts = (o.acts || []).map((a) => `
+    <div class="ol-act">
+      <div class="ol-act-h"><span class="ol-act-name">${escapeHtml(a.act)}</span><span class="ol-act-range">${a.from}~${a.to}화</span></div>
+      <div class="ol-act-goal">${escapeHtml(a.goal || "")}</div>
+      ${a.turn ? `<div class="ol-act-turn">↳ 전환점: ${escapeHtml(a.turn)}</div>` : ""}
+      ${(a.events || []).length ? `<ul class="ol-events">${a.events.map((e) => `<li>${escapeHtml(e)}</li>`).join("")}</ul>` : ""}
+    </div>`).join("");
+  const beats = (o.beats || []).map((b) => `<li class="ol-beat"><span class="ol-beat-n">${b.n}화</span><span class="ol-beat-t">${BEAT_EMOJI[b.type] || "•"} ${escapeHtml(b.type)}</span><span class="ol-beat-d">${escapeHtml(b.desc)}</span></li>`).join("");
+
+  return `<div class="outline-panel">${head}
+    ${o.logline ? `<div class="ol-logline">“${escapeHtml(o.logline)}”${o.endingType ? ` <span class="ol-ending">· ${escapeHtml(o.endingType)}</span>` : ""}</div>` : ""}
+    <div class="ol-acts">${acts}</div>
+    <div class="ol-beats-h">🎢 도파민 비트 (${(o.beats || []).length}) — 각 회차에 배치되어 집필 시 자동 주입</div>
+    <ul class="ol-beats">${beats}</ul>
+  </div>`;
+}
+
+async function generateOutline() {
+  if (state.outlineBusy || state.chapterRunning) return;
+  state.outlineBusy = true;
+  state.outlineOpen = true;
+  renderDraftStudio(el("outputPanel"));
+  el("runStatus").textContent = "아웃라인 설계 중";
+  try {
+    const res = await fetch("/api/outline", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ input: collectInput(), total: state.totalChapters, model: el("modelSelect").value }),
+    });
+    const data = await res.json();
+    if (!data.ok || !data.outline) throw new Error(data.error || "아웃라인 생성 실패");
+    state.outline = data.outline;
+    el("runStatus").textContent = data.fallback ? "아웃라인 완료(폴백)" : "아웃라인 완료";
+    toast(`${state.totalChapters}화 완결 아웃라인을 설계했습니다. 이제 회차 생성 시 자동 반영됩니다.`, "success");
+  } catch (err) {
+    el("runStatus").textContent = "오류";
+    toast(err.message || "아웃라인 생성 실패", "error");
+  } finally {
+    state.outlineBusy = false;
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+  }
 }
 
 // 누적 연재 메모리 패널(스토리 바이블) — 줄거리·미회수 떡밥·인물 현황·확정 설정을 한눈에.
@@ -1305,6 +1364,12 @@ function renderDraftStudio(panel) {
   if (memT) memT.addEventListener("click", () => { state.memoryOpen = !state.memoryOpen; renderDraftStudio(panel); });
   const memC = el("memoryClose");
   if (memC) memC.addEventListener("click", () => { state.memoryOpen = false; renderDraftStudio(panel); });
+  const olT = el("outlineToggle");
+  if (olT) olT.addEventListener("click", () => { state.outlineOpen = !state.outlineOpen; renderDraftStudio(panel); });
+  const olGen = el("outlineGen");
+  if (olGen) olGen.addEventListener("click", generateOutline);
+  const olClose = el("outlineClose");
+  if (olClose) olClose.addEventListener("click", () => { state.outlineOpen = false; renderDraftStudio(panel); });
 
   // 회차별 피드백/수정 액션 (이벤트 위임)
   panel.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", onChapterAction));
@@ -1367,6 +1432,7 @@ async function streamChapterRequest(from, count, opts = {}) {
       input, model, fromChapter: from, count, total: state.totalChapters, prevText,
       ctx: { foresight: state.buffers.foresight, world: state.buffers.world, plot: state.buffers.plot },
       memories: state.memories, // 연재 메모리(서버가 'from 미만'만 합성해 주입)
+      outline: state.outline || undefined, // 시즌 아웃라인(회차별 막·도파민 비트 주입)
       revise: opts.revise || undefined,
     }),
     signal: state.chapterController.signal,
@@ -2046,7 +2112,7 @@ function currentReport() {
   // 생성한 연속 원고(2화 이후)도 함께 저장/내보내기.
   const chapters = {};
   Object.entries(state.chapters).forEach(([k, v]) => { if (v) chapters[k] = v; });
-  return { generatedAt: new Date().toISOString(), model: state.lastModel, agents, usage: state.usage, chapters, memories: state.memories };
+  return { generatedAt: new Date().toISOString(), model: state.lastModel, agents, usage: state.usage, chapters, memories: state.memories, outline: state.outline };
 }
 
 async function loadProjects(selectId) {
@@ -2114,6 +2180,7 @@ async function openProject(id) {
       if (p.report.usage) { state.usage = p.report.usage; updateUsage(); }
       if (p.report.chapters) state.chapters = { ...p.report.chapters };
       state.memories = (p.report.memories && typeof p.report.memories === "object") ? { ...p.report.memories } : {};
+      state.outline = (p.report.outline && Array.isArray(p.report.outline.acts)) ? p.report.outline : null;
     }
     el("workspaceTitle").textContent = p.title || (STUDIO_META[state.studio] || STUDIO_META.production).title;
     setActiveTab(AGENTS[0].id);

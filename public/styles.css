@@ -469,3 +469,29 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .tool-result { border-top: 1px solid var(--line); padding-top: 12px; max-height: 50vh; overflow-y: auto; }
 .tool-result-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
 .tool-result-tag { font-weight: 800; font-size: 0.82rem; color: var(--green); }
+
+/* ----- 시즌 아웃라인 (기승전결 + 도파민 비트) ----- */
+.outline-panel { margin: 12px 0; border: 1px solid var(--line-strong); border-radius: 10px; background: #f6f3fc; padding: 12px 14px; }
+.ol-head { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--violet); margin-bottom: 10px; flex-wrap: wrap; }
+.ol-head .ol-sub { font-weight: 700; font-size: 0.78rem; color: var(--muted); }
+.ol-head .mini { margin-left: auto; }
+.ol-head .mini + .mini { margin-left: 0; }
+.ol-empty { color: var(--muted); font-size: 0.86rem; }
+.ol-logline { font-size: 0.92rem; font-weight: 700; color: var(--ink); margin-bottom: 10px; }
+.ol-ending { font-weight: 700; color: var(--violet); font-size: 0.82rem; }
+.ol-acts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.ol-act { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.ol-act-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ol-act-name { font-weight: 900; color: var(--violet); font-size: 1rem; }
+.ol-act-range { font-weight: 800; font-size: 0.8rem; color: var(--muted); }
+.ol-act-goal { font-size: 0.86rem; color: var(--ink); margin-top: 4px; line-height: 1.45; }
+.ol-act-turn { font-size: 0.82rem; color: var(--amber); margin-top: 4px; }
+.ol-events { margin: 6px 0 0; padding-left: 18px; }
+.ol-events li { font-size: 0.82rem; color: var(--muted); line-height: 1.45; }
+.ol-beats-h { font-weight: 800; font-size: 0.84rem; color: var(--ink); margin: 6px 0 8px; }
+.ol-beats { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.ol-beat { display: grid; grid-template-columns: 56px 84px 1fr; gap: 8px; align-items: baseline; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.ol-beat-n { font-weight: 900; color: var(--violet); font-size: 0.82rem; }
+.ol-beat-t { font-weight: 800; font-size: 0.82rem; }
+.ol-beat-d { font-size: 0.84rem; color: var(--ink); line-height: 1.4; }
+@media (max-width: 760px) { .ol-acts { grid-template-columns: 1fr; } .ol-beat { grid-template-columns: 48px 72px 1fr; } }

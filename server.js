@@ -16,6 +16,7 @@ const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/cri
 const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar, composeCanonLock } = require("./lib/memory");
 const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
 const { buildToolPrompt, localTool, TOOLS } = require("./lib/tools");
+const { buildOutlinePrompt, parseOutline, localOutline, outlineGuideFor } = require("./lib/outline");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
@@ -295,6 +296,32 @@ async function handleCritique(req, res) {
   }
 }
 
+// 시즌 아웃라인: 완결 화수 → 기승전결 + 도파민 비트(JSON). 단발 응답.
+async function handleOutline(req, res) {
+  const payload = await readJson(req);
+  const input = payload.input || {};
+  const total = Math.max(5, Math.min(MAX_CHAPTER, Number(payload.total) || 25));
+  const model = payload.model || config.defaultModel;
+
+  const provider = resolveMode();
+  if (provider === "local") {
+    return sendJson(res, 200, { ok: true, fallback: true, outline: localOutline({ input, total }) });
+  }
+  try {
+    const { system, user } = buildOutlinePrompt({ input, total });
+    const { text } = await streamMessage({
+      provider, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.7, maxTokens: 3000,
+    });
+    const outline = parseOutline(text, total);
+    if (!outline) return sendJson(res, 200, { ok: true, fallback: true, outline: localOutline({ input, total }), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, outline });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, fallback: true, outline: localOutline({ input, total }), note: err?.message });
+  }
+}
+
 // AI 글쓰기 도구: 브레인스토밍·묘사·다시쓰기·확장·압축·이름. 단발 응답.
 async function handleTool(req, res) {
   const payload = await readJson(req);
@@ -455,6 +482,8 @@ async function handleChapter(req, res) {
   // 세계관 캐논 락: 초기 세계관 규칙 + 누적 확정 설정을 항상 풀웨이트로 주입(후반부 드리프트 방지).
   const canonLock = composeCanonLock(payload.memories, input, { upTo: from });
   if (canonLock) ctx.canonLock = canonLock;
+  // 시즌 아웃라인이 있으면, 현재 회차의 막·도파민 비트 지침을 회차별로 주입한다.
+  const outline = payload.outline && Array.isArray(payload.outline.acts) ? payload.outline : null;
   const revise = payload.revise && payload.revise.note ? payload.revise : null;
   let prevText = String(payload.prevText || "");
 
@@ -493,6 +522,8 @@ async function handleChapter(req, res) {
 
     for (let n = from; n <= end; n++) {
       const isFinale = n >= total;
+      // 이 회차의 막·도파민 비트 지침을 주입(아웃라인이 있을 때).
+      ctx.outlineGuide = outline ? outlineGuideFor(outline, n) : "";
       emit("chapter-start", { n, isFinale });
       if (mode === "local") {
         const text = localChapter(input, n, prevText, isFinale);
@@ -609,6 +640,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/tool") {
     return handleTool(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/outline") {
+    return handleOutline(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/audit") {
