@@ -145,6 +145,10 @@ const state = {
   autoFinalPass: true,   // 전자동에서 마지막에 전체 보완 1회
   audit: null,           // 완성도 심사 결과
   auditBusy: false,
+  lastImpact: null,      // 마지막 AI 임팩트 리포트(Before/After) 결과
+  memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
+  memoryBusy: {},        // n -> 메모리 생성 중 여부
+  memoryOpen: false,     // 스토리 바이블 패널 펼침 여부
   lastRunChapters: [],   // 이번 실행에서 새로 생성한 화 번호
   buffers: {},      // agentId -> markdown
   statuses: {},     // agentId -> idle|running|done|error
@@ -593,6 +597,7 @@ function resetRun() {
   state.statuses = {};
   state.errors = {};
   state.chapters = {};   // 새 파이프라인 실행 시 연속 원고도 초기화(1화가 새로 생성됨)
+  state.memories = {};   // 연재 메모리도 초기화(회차가 새로 쌓이며 다시 누적)
   state.usage = { input_tokens: 0, output_tokens: 0 };
   AGENTS.forEach((a) => { state.statuses[a.id] = "idle"; updateAgentCard(a.id); });
   updateUsage();
@@ -975,6 +980,7 @@ function draftStudioHtml() {
       ${nums.length && !state.chapterRunning ? `<button class="mini primary" id="reviseAll" type="button" title="모든 회차를 각자의 피드백대로 한번에 보완">✦ 전체 보완</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="auditBtn" type="button" title="작품 완성도를 공모전 본심 기준으로 심사(흥행 잣대 아님)">📋 완성도 심사</button>` : ""}
       ${nums.length && !state.chapterRunning ? `<button class="mini" id="novelDownload" type="button" title="생성된 회차를 하나의 소설 파일로 다운로드">⬇ 소설 다운로드</button>` : ""}
+      ${Object.keys(state.memories).length ? `<button class="mini${state.memoryOpen ? " primary" : ""}" id="memoryToggle" type="button" title="누적된 연재 메모리(줄거리·미회수 떡밥·인물 현황·확정 설정)를 봅니다">🧭 스토리 바이블 (${Object.keys(state.memories).length})</button>` : ""}
       ${maxCh > 1 && !state.chapterRunning ? `<button class="mini danger" id="chapterReset" type="button" title="2화 이후 생성 원고 삭제">원고 초기화</button>` : ""}
     </div>`;
 
@@ -1010,7 +1016,51 @@ function draftStudioHtml() {
       return `<article class="chapter-block">${tag}${md}${actions}${critBlock}${noteBlock}</article>`;
     }).join('<hr class="chapter-sep" />');
   }
-  return `<div class="chapter-studio">${controls}${auditPanelHtml()}<div id="chapterList">${body}</div></div>`;
+  return `<div class="chapter-studio">${controls}${storyMemoryHtml()}${auditPanelHtml()}<div id="chapterList">${body}</div></div>`;
+}
+
+// 누적 연재 메모리 패널(스토리 바이블) — 줄거리·미회수 떡밥·인물 현황·확정 설정을 한눈에.
+function storyMemoryHtml() {
+  if (!state.memoryOpen) return "";
+  const nums = Object.keys(state.memories).map(Number).filter((n) => !Number.isNaN(n)).sort((a, b) => a - b);
+  if (!nums.length) return `<div class="story-bible"><div class="sb-head">🧭 연재 메모리</div><div class="sb-empty">아직 기록된 회차 메모리가 없습니다. 회차를 생성하면 자동으로 쌓입니다.</div></div>`;
+
+  const norm = (s) => String(s).replace(/\s+/g, "").toLowerCase();
+  const opened = [], resolved = [];
+  const charState = new Map(); const canonSeen = new Set(); const canon = [];
+  nums.forEach((n) => {
+    const m = state.memories[n] || {};
+    (m.threadsOpened || []).forEach((t) => opened.push(t));
+    (m.threadsResolved || []).forEach((t) => resolved.push(t));
+    (m.characters || []).forEach((c) => { if (c.name && c.state) charState.set(c.name, c.state); });
+    (m.canon || []).forEach((c) => { const k = norm(c); if (k && !canonSeen.has(k)) { canonSeen.add(k); canon.push(c); } });
+  });
+  const resolvedNorm = resolved.map(norm);
+  const seen = new Set(); const open = [];
+  opened.forEach((t) => {
+    const k = norm(t);
+    if (!k || seen.has(k)) return; seen.add(k);
+    if (!resolvedNorm.some((r) => r.includes(k) || k.includes(r))) open.push(t);
+  });
+
+  const synopsis = nums.map((n) => {
+    const m = state.memories[n] || {};
+    const busy = state.memoryBusy[n] ? ' <span class="sb-busy">갱신 중…</span>' : "";
+    return `<li><b>${n}화</b>${m.title ? ` «${escapeHtml(m.title)}»` : ""}: ${escapeHtml(m.synopsis || "")}${busy}</li>`;
+  }).join("");
+  const list = (arr) => arr.map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  const chars = [...charState.entries()].map(([name, st]) => `<li><b>${escapeHtml(name)}</b> — ${escapeHtml(st)}</li>`).join("");
+
+  return `<div class="story-bible">
+    <div class="sb-head">🧭 연재 메모리 — 스토리 바이블 <span class="sb-sub">${nums.length}개 회차 기록 · 다음 회차 집필에 자동 주입됩니다</span>
+      <button class="mini" id="memoryClose" type="button">닫기</button></div>
+    <div class="sb-grid">
+      <div class="sb-col sb-wide"><div class="sb-label">회차 줄거리</div><ul class="sb-syn">${synopsis}</ul></div>
+      ${open.length ? `<div class="sb-col"><div class="sb-label warn">아직 회수되지 않은 떡밥·복선 (${open.length})</div><ul class="sb-open">${list(open)}</ul></div>` : ""}
+      ${chars ? `<div class="sb-col"><div class="sb-label">인물 현재 상태</div><ul class="sb-char">${chars}</ul></div>` : ""}
+      ${canon.length ? `<div class="sb-col"><div class="sb-label">확정 설정 (canon)</div><ul class="sb-canon">${list(canon)}</ul></div>` : ""}
+    </div>
+  </div>`;
 }
 
 function critiqueHtml(n, c) {
@@ -1086,6 +1136,10 @@ function renderDraftStudio(panel) {
   if (aRev) aRev.addEventListener("click", reviseFromAudit);
   const aClose = el("auditClose");
   if (aClose) aClose.addEventListener("click", () => { state.audit = null; renderDraftStudio(panel); });
+  const memT = el("memoryToggle");
+  if (memT) memT.addEventListener("click", () => { state.memoryOpen = !state.memoryOpen; renderDraftStudio(panel); });
+  const memC = el("memoryClose");
+  if (memC) memC.addEventListener("click", () => { state.memoryOpen = false; renderDraftStudio(panel); });
 
   // 회차별 피드백/수정 액션 (이벤트 위임)
   panel.querySelectorAll("[data-act]").forEach((b) => b.addEventListener("click", onChapterAction));
@@ -1114,6 +1168,7 @@ function resetChapters() {
   if (state.chapterRunning) return;
   if (!confirm("2화 이후 생성한 원고를 삭제할까요? (1화 오프닝은 유지됩니다)")) return;
   state.chapters = {};
+  state.memories = {}; // 연재 메모리도 함께 초기화(원고와 어긋나지 않도록)
   toast("연속 원고를 초기화했습니다.", "info");
   if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
 }
@@ -1126,14 +1181,27 @@ function currentMaxChapter() {
 // 한 번의 /api/chapter 요청(여러 화 배치/수정)을 스트리밍 처리. running 상태는 호출부가 관리한다.
 async function streamChapterRequest(from, count, opts = {}) {
   const prevText = from > 1 ? (chapterMap()[from - 1] || "") : "";
+  const doneThisCall = [];
   const input = collectInput();
   const model = el("modelSelect").value || state.config.defaultModel;
+
+  // 연속성 백필: from 미만인데 메모리가 없는 회차(파이프라인이 만든 1화·불러온 프로젝트 등)를
+  // 먼저 요약해 둔다. 이게 있어야 이번 회차에 '지금까지의 이야기'가 온전히 주입된다.
+  // (수정 모드는 같은 회차 재작성이라 백필이 불필요하므로 건너뛴다.)
+  if (!opts.revise) {
+    const map0 = chapterMap();
+    for (let k = 1; k < from; k++) {
+      if (state.chapterController?.signal.aborted) break;
+      if (map0[k] && !state.memories[k]) await fetchSynopsis(k);
+    }
+  }
   const res = await fetch("/api/chapter", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       input, model, fromChapter: from, count, total: state.totalChapters, prevText,
       ctx: { foresight: state.buffers.foresight, world: state.buffers.world, plot: state.buffers.plot },
+      memories: state.memories, // 연재 메모리(서버가 'from 미만'만 합성해 주입)
       revise: opts.revise || undefined,
     }),
     signal: state.chapterController.signal,
@@ -1165,11 +1233,44 @@ async function streamChapterRequest(from, count, opts = {}) {
         if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
       } else if (type === "chapter-done") {
         state.lastRunChapters.push(d.n);
+        doneThisCall.push(d.n);
         delete state.critiques[d.n]; // 새로/다시 쓰였으니 기존 피드백 무효화
       } else if (type === "error") {
         toast(d.message || "원고 생성 오류", "error");
       }
     }
+  }
+  // 이번 요청에서 완성된 회차의 '연재 메모리'를 생성한다(다음 배치의 연속성 컨텍스트).
+  // 원고 스트림이 끝난 뒤에 돌리므로 본문 표시를 지연시키지 않는다.
+  for (const n of doneThisCall) {
+    if (state.chapterController?.signal.aborted) break;
+    await fetchSynopsis(n);
+  }
+}
+
+// 한 회차 원고 → 연재 메모리(요약·떡밥·인물·캐논)를 만들어 state.memories에 누적한다.
+async function fetchSynopsis(n) {
+  const text = chapterMap()[n];
+  if (!text || !text.trim()) return;
+  state.memoryBusy[n] = true;
+  if (state.activeTab === "draft" && state.memoryOpen) renderDraftStudio(el("outputPanel"));
+  try {
+    const res = await fetch("/api/synopsis", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        input: collectInput(), n, total: state.totalChapters,
+        chapterText: text, model: el("modelSelect").value || state.config.defaultModel,
+      }),
+      signal: state.chapterController?.signal,
+    });
+    const data = await res.json();
+    if (data.ok && data.memory) state.memories[n] = data.memory;
+  } catch {
+    // 메모리 생성 실패는 치명적이지 않다(연속성 보강이 비는 것뿐). 조용히 넘어간다.
+  } finally {
+    delete state.memoryBusy[n];
+    if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
   }
 }
 
@@ -1496,6 +1597,115 @@ async function ideateFill() {
   }
 }
 
+/* --------------------- AI 임팩트 리포트 (Before → After) --------------------- */
+
+async function runImpact() {
+  const idea = el("ideaInput").value.trim();
+  const input = collectInput();
+  if (!idea && !input.logline && !input.sfPremise) {
+    toast("아이디어 한 줄을 입력하거나 기획을 먼저 채워 주세요.", "warn");
+    el("ideaInput").focus();
+    return;
+  }
+  const btn = el("impactBtn");
+  const label = btn.querySelector("span:last-child");
+  const prev = label.textContent;
+  btn.disabled = true;
+  label.textContent = "AI가 진단 중…";
+  el("runStatus").textContent = "Before/After 진단 중";
+  // 모달을 먼저 열고 로딩을 보여준다.
+  openImpactModal(`<div class="impact-loading"><span class="dot"></span> AI가 이 아이디어의 <b>Before / After</b>를 진단하고 있습니다…</div>`);
+
+  try {
+    const res = await fetch("/api/impact", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idea, input, genre: el("genre").value, subgenre: el("subgenre").value, model: el("modelSelect").value }),
+    });
+    const data = await res.json();
+    if (!data.ok || !data.impact) throw new Error(data.error || "진단 실패");
+    state.lastImpact = data.impact;
+    el("impactBody").innerHTML = impactHtml(data.impact, data.fallback);
+    bindImpactActions();
+    el("runStatus").textContent = data.fallback ? "진단 완료(폴백)" : "진단 완료";
+  } catch (err) {
+    el("impactBody").innerHTML = `<div class="impact-loading">진단에 실패했습니다: ${escapeHtml(err.message || "")}</div>`;
+    el("runStatus").textContent = "오류";
+  } finally {
+    btn.disabled = false;
+    label.textContent = prev;
+  }
+}
+
+function openImpactModal(innerHtml) {
+  el("impactBody").innerHTML = innerHtml;
+  const m = el("impactModal");
+  m.hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeImpactModal() {
+  el("impactModal").hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+function impactHtml(imp, fallback) {
+  const b = imp.before || {}, a = imp.after || {};
+  const gain = (a.score ?? 0) - (b.score ?? 0);
+  const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  const titles = (a.titles || []).map((t) => `<span class="imp-title">${escapeHtml(t)}</span>`).join("");
+
+  return `
+    <div class="impact-report">
+      <div class="imp-top">
+        <span class="imp-eyebrow">🎯 AI 임팩트 리포트${fallback ? " · 로컬 폴백" : ""}</span>
+        <h2 class="imp-verdict">${escapeHtml(imp.verdict || "이 아이디어의 가능성 진단")}</h2>
+        ${imp.genreFit ? `<p class="imp-genre">추천 결: <strong>${escapeHtml(imp.genreFit)}</strong></p>` : ""}
+      </div>
+
+      <div class="imp-scoreline">
+        <div class="imp-score before"><span class="imp-score-label">혼자 쓸 때</span><span class="imp-score-num">${b.score ?? "—"}</span><span class="imp-score-unit">/100</span></div>
+        <div class="imp-arrow">→<span class="imp-gain">+${gain}</span></div>
+        <div class="imp-score after"><span class="imp-score-label">이 솔루션 통과 후</span><span class="imp-score-num">${a.score ?? "—"}</span><span class="imp-score-unit">/100</span></div>
+      </div>
+
+      <div class="imp-cols">
+        <div class="imp-col imp-before">
+          <div class="imp-col-head">BEFORE · 혼자 막연하게 쓰면</div>
+          ${b.logline ? `<div class="imp-field"><span class="imp-k">로그라인</span><p class="imp-plain">“${escapeHtml(b.logline)}”</p></div>` : ""}
+          ${b.title ? `<div class="imp-field"><span class="imp-k">제목</span><p class="imp-plain">${escapeHtml(b.title)}</p></div>` : ""}
+          ${b.missing?.length ? `<div class="imp-field"><span class="imp-k">빠져 있는 흥행 요소</span><ul class="imp-bad">${li(b.missing)}</ul></div>` : ""}
+          ${b.risks?.length ? `<div class="imp-field"><span class="imp-k warn">혼자 연재하면 터질 문제</span><ul class="imp-risk">${li(b.risks)}</ul></div>` : ""}
+        </div>
+        <div class="imp-col imp-after">
+          <div class="imp-col-head">AFTER · 이 솔루션을 쓰면</div>
+          ${a.logline ? `<div class="imp-field"><span class="imp-k">흥행형 로그라인</span><p class="imp-strong">“${escapeHtml(a.logline)}”</p></div>` : ""}
+          ${titles ? `<div class="imp-field"><span class="imp-k">클릭되는 제목</span><div class="imp-titles">${titles}</div></div>` : ""}
+          ${a.hook ? `<div class="imp-field"><span class="imp-k">1화 오프닝 훅</span><p class="imp-hook">${escapeHtml(a.hook)}</p></div>` : ""}
+          ${a.upgrades?.length ? `<div class="imp-field"><span class="imp-k">AI가 보강하는 것</span><ul class="imp-good">${li(a.upgrades)}</ul></div>` : ""}
+          ${a.guarantees?.length ? `<div class="imp-field"><span class="imp-k ok">이 솔루션이 보장</span><ul class="imp-guar">${li(a.guarantees)}</ul></div>` : ""}
+        </div>
+      </div>
+
+      ${imp.keyChanges?.length ? `<div class="imp-changes"><span class="imp-k">핵심 변화</span><ul>${li(imp.keyChanges)}</ul></div>` : ""}
+
+      <div class="imp-cta">
+        <button class="command primary" id="impactApply" type="button"><span>이대로 Core IP 기획 채우기 →</span></button>
+        <button class="command" id="impactDismiss" type="button"><span>닫기</span></button>
+      </div>
+    </div>`;
+}
+
+function bindImpactActions() {
+  const apply = el("impactApply");
+  if (apply) apply.addEventListener("click", async () => {
+    closeImpactModal();
+    await ideateFill(); // AFTER를 실제 폼으로 — 진단이 곧바로 산출물로 이어진다.
+  });
+  const dismiss = el("impactDismiss");
+  if (dismiss) dismiss.addEventListener("click", closeImpactModal);
+}
+
 /* ------------------------------ Projects -------------------------------- */
 
 function currentReport() {
@@ -1508,7 +1718,7 @@ function currentReport() {
   // 생성한 연속 원고(2화 이후)도 함께 저장/내보내기.
   const chapters = {};
   Object.entries(state.chapters).forEach(([k, v]) => { if (v) chapters[k] = v; });
-  return { generatedAt: new Date().toISOString(), model: state.lastModel, agents, usage: state.usage, chapters };
+  return { generatedAt: new Date().toISOString(), model: state.lastModel, agents, usage: state.usage, chapters, memories: state.memories };
 }
 
 async function loadProjects(selectId) {
@@ -1575,6 +1785,7 @@ async function openProject(id) {
       state.lastModel = p.report.model || "";
       if (p.report.usage) { state.usage = p.report.usage; updateUsage(); }
       if (p.report.chapters) state.chapters = { ...p.report.chapters };
+      state.memories = (p.report.memories && typeof p.report.memories === "object") ? { ...p.report.memories } : {};
     }
     state.score = p.score ?? 0;
     el("readinessChip").textContent = `제작도 ${state.score}%`;
@@ -1706,6 +1917,10 @@ function boot() {
   el("runAgent").addEventListener("click", runAgent);
   el("stopAgent").addEventListener("click", stopAgent);
   el("ideateBtn").addEventListener("click", ideateFill);
+  el("impactBtn").addEventListener("click", runImpact);
+  el("impactClose").addEventListener("click", closeImpactModal);
+  el("impactModal").addEventListener("click", (e) => { if (e.target === el("impactModal")) closeImpactModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el("impactModal").hidden) closeImpactModal(); });
   el("refFile").addEventListener("change", (e) => handleRefUpload(e.target.files[0]));
   // '예시' 버튼: 현재 선택된 장르의 기본 예시 프리셋을 불러온다.
   el("loadExample").addEventListener("click", () => onGenreChange(true));

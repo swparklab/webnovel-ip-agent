@@ -47,12 +47,18 @@
         <form id="agentForm" class="agent-form">
           <div class="form-section ideate-box prod-only">
             <p class="section-note">✦ 아이디어 → Core IP 기획</p>
+            <p class="persona-line">막연한 아이디어 한 줄은 있는데, <strong>이게 웹소설로 통할지·어떻게 흥행 IP로 만들지</strong> 막막한 (예비)작가를 위한 도구입니다.</p>
             <label class="field"><span>막연한 아이디어 한 줄</span>
               <textarea id="ideaInput" rows="2" placeholder="예: AI가 사람들의 죽음을 예측하는 도시에서, 자기 사망 판정을 받은 분석관이 진실을 파헤친다"></textarea></label>
-            <button class="command primary ideate-btn" id="ideateBtn" type="button" title="아이디어로 Core IP 자동 기획">
-              <span class="dot"></span><span>이 아이디어로 기획 채우기</span>
-            </button>
-            <p class="section-hint">현재 선택된 <strong>장르</strong>의 흥행 문법에 맞춰 제목·로그라인·명제·기술·인물·세계규칙까지 자동으로 채웁니다. 더 맞는 장르면 장르도 바꿔 줍니다.</p>
+            <div class="ideate-actions">
+              <button class="command primary ideate-btn" id="impactBtn" type="button" title="혼자 쓸 때 vs 이 솔루션을 쓸 때를 AI가 진단">
+                <span class="dot"></span><span>🎯 이 아이디어, 통할까? (Before/After 진단)</span>
+              </button>
+              <button class="command" id="ideateBtn" type="button" title="아이디어로 Core IP 자동 기획">
+                <span>이 아이디어로 기획 채우기</span>
+              </button>
+            </div>
+            <p class="section-hint">먼저 <strong>AI 진단</strong>으로 가능성과 약점을 확인하고, 좋으면 현재 <strong>장르</strong>의 흥행 문법에 맞춰 제목·로그라인·명제·인물·세계규칙까지 자동으로 채웁니다.</p>
           </div>
 
           <div class="form-section">
@@ -294,6 +300,14 @@
     </div>
 
     <div class="toast" id="toast" hidden></div>
+
+    <!-- AI 임팩트 리포트 (Before → After 진단) 모달 -->
+    <div class="modal-backdrop" id="impactModal" hidden>
+      <div class="modal-card impact-modal" role="dialog" aria-modal="true" aria-label="AI 임팩트 리포트">
+        <button class="modal-close" id="impactClose" type="button" aria-label="닫기">✕</button>
+        <div id="impactBody"></div>
+      </div>
+    </div>
 
     <script src="markdown.js"></script>
     <script src="app.js"></script>

@@ -13,6 +13,8 @@ const {
 } = require("./lib/chapters");
 const { extractTextFromPdf } = require("./lib/pdf");
 const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/critique");
+const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar } = require("./lib/memory");
+const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
@@ -282,6 +284,66 @@ async function handleCritique(req, res) {
   }
 }
 
+// AI 임팩트 리포트: 날것 아이디어 → Before/After 진단(JSON). 솔루션 가치를 체감시킨다. SSE 아님.
+async function handleImpact(req, res) {
+  const payload = await readJson(req);
+  const idea = String(payload.idea || "").trim();
+  const input = payload.input || {};
+  const genre = payload.genre || input.genre || "aiForesight";
+  const subgenre = payload.subgenre || input.subgenre || "";
+  const model = payload.model || config.defaultModel;
+  if (!idea && !input.logline && !input.sfPremise) {
+    return sendJson(res, 400, { ok: false, error: "진단할 아이디어를 입력하세요." });
+  }
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, fallback: true, impact: localImpact(idea, input, genre, subgenre) });
+  }
+  try {
+    const { system, user } = buildImpactPrompt(idea, input, genre, subgenre);
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.6, maxTokens: 2200,
+    });
+    const impact = parseImpact(text);
+    if (!impact) return sendJson(res, 200, { ok: true, fallback: true, impact: localImpact(idea, input, genre, subgenre), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, impact });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, fallback: true, impact: localImpact(idea, input, genre, subgenre), note: err?.message });
+  }
+}
+
+// 연재 메모리: 한 회차 원고 → 구조화 요약(JSON). 다음 회차의 연속성 컨텍스트로 누적된다. SSE 아님.
+async function handleSynopsis(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const n = Math.max(1, Number(payload.n) || 1);
+  const total = Math.max(1, Number(payload.total) || 25);
+  const chapterText = String(payload.chapterText || "");
+  const model = payload.model || config.defaultModel;
+  if (!chapterText.trim()) return sendJson(res, 400, { ok: false, error: "요약할 원고가 없습니다." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, n, memory: localMemory(input, n, chapterText) });
+  }
+  try {
+    const { system, user } = buildSynopsisPrompt({ input, n, chapterText, total });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.2, maxTokens: 1200,
+    });
+    const memory = parseMemory(text);
+    if (!memory) return sendJson(res, 200, { ok: true, n, memory: localMemory(input, n, chapterText), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, n, memory });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, n, memory: localMemory(input, n, chapterText), note: err?.message });
+  }
+}
+
 // 기획 아키텍트: 아이디어 한 줄 → Core IP 폼 필드(JSON). SSE 아님(단발 응답).
 async function handleIdeate(req, res) {
   const payload = await readJson(req);
@@ -333,6 +395,12 @@ async function handleChapter(req, res) {
   // 결말(total)을 넘지 않게 한다.
   const end = Math.min(MAX_CHAPTER, total, from + count - 1);
   const ctx = payload.ctx || {};
+  // 연재 메모리(누적 요약 맵) → '지금까지의 이야기' 블록으로 합성해 회차 프롬프트에 주입.
+  // 현재 쓰는 회차(from) 미만의 메모리만 반영한다(직전 화는 prevText가 따로 담당).
+  if (payload.memories && typeof payload.memories === "object") {
+    const storySoFar = composeStorySoFar(payload.memories, { upTo: from });
+    if (storySoFar) ctx.storySoFar = storySoFar;
+  }
   const revise = payload.revise && payload.revise.note ? payload.revise : null;
   let prevText = String(payload.prevText || "");
 
@@ -462,6 +530,14 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/critique") {
     return handleCritique(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/synopsis") {
+    return handleSynopsis(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/impact") {
+    return handleImpact(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/audit") {

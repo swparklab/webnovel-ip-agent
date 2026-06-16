@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js",
-    "check": "node --check server.js && node --check lib/config.js && node --check lib/anthropic.js && node --check lib/claude-cli.js && node --check lib/llm.js && node --check lib/playbook.js && node --check lib/agents.js && node --check lib/orchestrator.js && node --check lib/store.js && node --check lib/local-engine.js",
+    "check": "node --check server.js && node --check lib/config.js && node --check lib/anthropic.js && node --check lib/claude-cli.js && node --check lib/llm.js && node --check lib/playbook.js && node --check lib/agents.js && node --check lib/orchestrator.js && node --check lib/store.js && node --check lib/local-engine.js && node --check lib/chapters.js && node --check lib/memory.js && node --check lib/impact.js && node --check lib/critique.js && node --check lib/audit.js && node --check public/app.js",
     "health": "node -e \"fetch('http://127.0.0.1:4173/api/health').then(r=>r.json()).then(console.log)\""
   },
   "engines": {

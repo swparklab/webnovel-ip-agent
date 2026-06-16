@@ -331,3 +331,81 @@ textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 
 #blendGenres option { padding: 3px 6px; border-radius: 4px; }
 #blendGenres option:checked { background: var(--green) linear-gradient(0deg, var(--green), var(--green)); color: #fff; }
 #platformChecks { margin-top: 6px; }
+
+/* ----- 연재 메모리(스토리 바이블) 패널 ----- */
+.story-bible { margin: 12px 0; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface-2); padding: 12px 14px; }
+.sb-head { display: flex; align-items: center; gap: 10px; font-weight: 800; color: var(--green); margin-bottom: 10px; flex-wrap: wrap; }
+.sb-head .sb-sub { font-weight: 700; font-size: 0.76rem; color: var(--muted); }
+.sb-head .mini { margin-left: auto; }
+.sb-empty { color: var(--muted); font-size: 0.86rem; }
+.sb-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.sb-col { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.sb-col.sb-wide { grid-column: 1 / -1; }
+.sb-label { font-weight: 800; font-size: 0.78rem; color: var(--ink); margin-bottom: 6px; }
+.sb-label.warn { color: var(--amber); }
+.story-bible ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.story-bible li { font-size: 0.85rem; line-height: 1.5; color: var(--ink); }
+.sb-syn li b { color: var(--green); }
+.sb-open li { color: var(--amber); }
+.sb-busy { color: var(--muted); font-style: italic; font-size: 0.78rem; }
+@media (max-width: 760px) { .sb-grid { grid-template-columns: 1fr; } }
+
+/* ----- 아이디어 박스 · 진단 액션 ----- */
+.persona-line { font-size: 0.84rem; line-height: 1.55; color: var(--muted); margin: 2px 0 4px; }
+.persona-line strong { color: var(--green); }
+.ideate-actions { display: grid; gap: 8px; }
+
+/* ----- 모달 (AI 임팩트 리포트) ----- */
+body.modal-open { overflow: hidden; }
+.modal-backdrop { position: fixed; inset: 0; background: rgba(18, 33, 31, 0.55); backdrop-filter: blur(3px); display: grid; place-items: center; z-index: 50; padding: 24px; }
+.modal-card { position: relative; background: var(--surface); border: 1px solid var(--line-strong); border-radius: 14px; max-width: 920px; width: 100%; max-height: 90vh; overflow-y: auto; box-shadow: 0 18px 60px rgba(0,0,0,0.28); padding: 26px 28px; }
+.modal-close { position: absolute; top: 14px; right: 14px; width: 34px; height: 34px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--muted); cursor: pointer; font-weight: 800; }
+.modal-close:hover { color: var(--rose); border-color: var(--rose); }
+.impact-loading { padding: 40px 10px; text-align: center; color: var(--muted); font-weight: 700; }
+
+/* 임팩트 리포트 본문 */
+.imp-top { text-align: center; margin-bottom: 6px; }
+.imp-eyebrow { font-size: 0.78rem; font-weight: 800; color: var(--green); letter-spacing: 0.02em; }
+.imp-verdict { font-size: 1.18rem; line-height: 1.45; margin: 6px 0 2px; color: var(--ink); }
+.imp-genre { font-size: 0.84rem; color: var(--muted); margin: 0; }
+.imp-genre strong { color: var(--ink); }
+
+.imp-scoreline { display: flex; align-items: center; justify-content: center; gap: 18px; margin: 18px 0 20px; flex-wrap: wrap; }
+.imp-score { display: grid; justify-items: center; padding: 12px 22px; border-radius: 12px; min-width: 150px; }
+.imp-score.before { background: #f1f3f2; border: 1px solid var(--line); }
+.imp-score.after { background: #e3f4ee; border: 1px solid var(--green); }
+.imp-score-label { font-size: 0.74rem; font-weight: 800; color: var(--muted); }
+.imp-score.after .imp-score-label { color: var(--green); }
+.imp-score-num { font-size: 2.2rem; font-weight: 900; line-height: 1.1; color: var(--ink); }
+.imp-score.before .imp-score-num { color: #8a958f; }
+.imp-score.after .imp-score-num { color: var(--green); }
+.imp-score-unit { font-size: 0.72rem; color: var(--muted); }
+.imp-arrow { display: grid; justify-items: center; font-size: 1.5rem; color: var(--line-strong); font-weight: 900; }
+.imp-gain { font-size: 0.92rem; font-weight: 900; color: var(--green); background: #e3f4ee; border-radius: 20px; padding: 1px 10px; margin-top: 2px; }
+
+.imp-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.imp-col { border-radius: 12px; padding: 14px 16px; }
+.imp-col.imp-before { background: #f7f8f7; border: 1px solid var(--line); }
+.imp-col.imp-after { background: #f1faf6; border: 1px solid var(--green); }
+.imp-col-head { font-weight: 900; font-size: 0.86rem; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px dashed var(--line-strong); }
+.imp-before .imp-col-head { color: #8a958f; }
+.imp-after .imp-col-head { color: var(--green); }
+.imp-field { margin-bottom: 12px; }
+.imp-k { display: inline-block; font-size: 0.72rem; font-weight: 800; color: var(--muted); margin-bottom: 4px; }
+.imp-k.warn { color: var(--amber); }
+.imp-k.ok { color: var(--green); }
+.imp-plain { margin: 0; color: #7c867f; font-size: 0.9rem; line-height: 1.5; }
+.imp-strong { margin: 0; color: var(--ink); font-size: 0.96rem; font-weight: 700; line-height: 1.55; }
+.imp-hook { margin: 0; color: var(--ink); font-size: 0.92rem; font-style: italic; line-height: 1.5; }
+.imp-titles { display: grid; gap: 5px; }
+.imp-title { font-weight: 800; color: var(--green); font-size: 0.9rem; }
+.imp-report ul { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.imp-report li { font-size: 0.85rem; line-height: 1.5; }
+.imp-bad li, .imp-risk li { color: #97784b; }
+.imp-risk li { color: var(--amber); }
+.imp-good li, .imp-guar li { color: var(--ink); }
+.imp-guar li { color: var(--green); font-weight: 600; }
+
+.imp-changes { margin-top: 16px; padding: 12px 16px; background: var(--surface-2); border-radius: 10px; }
+.imp-cta { display: flex; gap: 10px; justify-content: center; margin-top: 20px; flex-wrap: wrap; }
+@media (max-width: 720px) { .imp-cols { grid-template-columns: 1fr; } .modal-card { padding: 20px 16px; } }
