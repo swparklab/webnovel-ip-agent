@@ -7,7 +7,7 @@ const path = require("path");
 const { config, resolveMode, publicConfig } = require("./lib/config");
 const { runPipeline, pipelineAgents } = require("./lib/orchestrator");
 const { streamMessage } = require("./lib/llm");
-const { buildIdeatePrompt, extractFields, localIdeate } = require("./lib/ideate");
+const { buildIdeatePrompt, buildCompletePrompt, extractFields, localIdeate, localComplete, FIELD_KEYS } = require("./lib/ideate");
 const {
   buildChapterFirstPrompt, buildChapterSecondPrompt, localChapter, MAX_CHAPTER,
 } = require("./lib/chapters");
@@ -362,33 +362,45 @@ async function handleIdeate(req, res) {
   const subgenre = payload.subgenre || "";
   const blendGenres = payload.blendGenres || "";
   const model = payload.model || config.defaultModel;
-  if (!idea) return sendJson(res, 400, { ok: false, error: "아이디어를 입력하세요." });
+  // mode==='complete': 작가가 채운 항목은 유지하고 '빈 칸만' AI로 보강.
+  const complete = payload.mode === "complete";
+  const input = payload.input || {};
+
+  if (complete) {
+    const hasAny = FIELD_KEYS.some((k) => String(input[k] ?? "").trim());
+    if (!hasAny && !idea) return sendJson(res, 400, { ok: false, error: "먼저 아는 항목을 한두 개라도 채워주세요." });
+  } else if (!idea) {
+    return sendJson(res, 400, { ok: false, error: "아이디어를 입력하세요." });
+  }
 
   const mode = resolveMode();
+  const fallback = () => (complete ? localComplete(input, genre, subgenre) : localIdeate(idea, genre, subgenre));
   if (mode === "local") {
-    return sendJson(res, 200, { ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre) });
+    return sendJson(res, 200, { ok: true, fallback: true, complete, fields: fallback() });
   }
   try {
-    const { system, user } = buildIdeatePrompt(idea, genre, subgenre, blendGenres);
+    const { system, user } = complete
+      ? buildCompletePrompt(input, genre, subgenre, blendGenres)
+      : buildIdeatePrompt(idea, genre, subgenre, blendGenres);
     const { text } = await streamMessage({
       provider: mode, // 'api' | 'cli'
       model,
       system,
       messages: [{ role: "user", content: user }],
-      temperature: 0.7,
+      temperature: complete ? 0.6 : 0.7,
       maxTokens: 4000, // 심화 기획(IP Bible)까지 채우므로 넉넉히
     });
     const fields = extractFields(text);
     if (!fields) {
       return sendJson(res, 200, {
-        ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre),
+        ok: true, fallback: true, complete, fields: fallback(),
         note: "모델 응답을 JSON으로 파싱하지 못해 폴백을 사용했습니다.",
       });
     }
-    return sendJson(res, 200, { ok: true, fields });
+    return sendJson(res, 200, { ok: true, complete, fields });
   } catch (err) {
     return sendJson(res, 200, {
-      ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre),
+      ok: true, fallback: true, complete, fields: fallback(),
       note: err?.message || "생성 실패로 폴백을 사용했습니다.",
     });
   }

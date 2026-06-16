@@ -1640,6 +1640,65 @@ async function ideateFill() {
   }
 }
 
+// 아는 만큼만 채우고 '빈 칸만' AI로 보강한다. 채워진 항목은 절대 덮어쓰지 않는다.
+async function completeFill() {
+  if (state.running) return;
+  const input = collectInput();
+  const idea = el("ideaInput").value.trim();
+  const filledCount = PRESET_FIELDS.filter((k) => String(input[k] ?? "").trim()).length;
+  if (!filledCount && !idea) {
+    toast("아는 항목을 한두 개라도 먼저 채워주세요. (제목·로그라인·주인공 등)", "warn");
+    return;
+  }
+  const btn = el("completeBtn");
+  const label = btn.querySelector("span");
+  const prev = label.textContent;
+  btn.disabled = true;
+  label.textContent = "빈 칸 채우는 중…";
+  el("runStatus").textContent = "빈 칸 보강 중";
+
+  try {
+    const res = await fetch("/api/ideate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "complete", idea, input,
+        genre: el("genre").value, subgenre: el("subgenre").value,
+        blendGenres: input.blendGenres, model: el("modelSelect").value,
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.error || "보강 실패");
+    const f = data.fields || {};
+
+    // 핵심: '비어 있는' 텍스트 필드에만 적용한다(작가가 채운 값은 절대 덮지 않음).
+    let applied = 0;
+    Object.entries(f).forEach(([k, v]) => {
+      if (k === "genre") return;
+      const node = el(k);
+      if (node && typeof v === "string" && node.type !== "checkbox" && !node.value.trim() && v.trim()) {
+        node.value = v.trim();
+        applied++;
+      }
+    });
+    if (el("ipTitle").value) el("workspaceTitle").textContent = el("ipTitle").value;
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = applied ? "빈 칸 보강 완료" : "보강 없음";
+    toast(
+      applied
+        ? `빈 칸 ${applied}개를 채웠습니다${data.fallback ? "(폴백)" : ""}. 채워두신 항목은 그대로 유지했습니다.`
+        : "이미 대부분 채워져 있어 보강할 빈 칸이 없습니다.",
+      applied ? "success" : "info",
+    );
+  } catch (err) {
+    el("runStatus").textContent = "오류";
+    toast(err.message || "보강 실패", "error");
+  } finally {
+    btn.disabled = false;
+    label.textContent = prev;
+  }
+}
+
 /* --------------------- AI 임팩트 리포트 (Before → After) --------------------- */
 
 async function runImpact() {
@@ -1964,6 +2023,7 @@ function boot() {
   el("runAgent").addEventListener("click", runAgent);
   el("stopAgent").addEventListener("click", stopAgent);
   el("ideateBtn").addEventListener("click", ideateFill);
+  el("completeBtn").addEventListener("click", completeFill);
   el("impactBtn").addEventListener("click", runImpact);
   el("impactClose").addEventListener("click", closeImpactModal);
   el("impactModal").addEventListener("click", (e) => { if (e.target === el("impactModal")) closeImpactModal(); });
