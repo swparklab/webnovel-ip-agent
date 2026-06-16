@@ -41,7 +41,7 @@ const STUDIO_PIPELINE = { production: "production", foresight: "production", pla
 
 // 스튜디오별 표시 메타.
 const STUDIO_META = {
-  production: { title: "웹소설 제작실", eyebrow: "Webnovel IP Production OS", brand: "전 장르 웹소설 IP 에이전트", run: "에이전트 실행", status: "제작실", toast: "제작실로 전환했습니다." },
+  production: { title: "웹소설 제작실", eyebrow: "Webnovel IP Production OS", brand: "전 장르 웹소설 에이전트", run: "에이전트 실행", status: "제작실", toast: "제작실로 전환했습니다." },
   platform: { title: "플랫폼 운영실", eyebrow: "Platform Intelligence OS", brand: "플랫폼 태깅·번역·전략 운영실", run: "운영 분석 실행", status: "운영실", toast: "운영실(Platform Intelligence)로 전환했습니다." },
   foresight: { title: "AI미래학자 박성우 · AI FORESIGHT", eyebrow: "AI Foresight SF Studio", brand: "AI미래학자 박성우의 미래예측 SF 스튜디오", run: "AI FORESIGHT 실행", status: "박성우 모드", toast: "AI미래학자 박성우 모드로 전환했습니다. 장르를 SF로 맞췄습니다." },
   business: { title: "IP 사업실", eyebrow: "IP Business / Monetization OS", brand: "수익화·OSMU·투자 IP 사업실", run: "사업 분석 실행", status: "사업실", toast: "IP 사업실로 전환했습니다. 현재 작품 IP로 수익·확장·투자 전략을 만듭니다." },
