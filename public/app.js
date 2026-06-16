@@ -1472,7 +1472,9 @@ async function applyFeedback(n) {
     await harnessRefine(n, { maxAttempts: 2 });
     const b = state.critiqueBefore[n]?.overall, a = state.critiques[n]?.overall;
     el("runStatus").textContent = "보완 완료";
-    toast(`${n}화 보완: 종합 ${b ?? "-"} → ${a ?? "-"}`, a > b ? "success" : "warn");
+    // 점수를 못 읽었으면(둘 중 하나라도 누락) 실패가 아니라 중립으로 안내한다.
+    const kind = (Number.isFinite(a) && Number.isFinite(b)) ? (a >= b ? "success" : "warn") : "info";
+    toast(`${n}화 보완: 종합 ${b ?? "-"} → ${a ?? "-"}`, kind);
   } catch (err) {
     if (err.name === "AbortError") { el("runStatus").textContent = "중단됨"; toast("보완을 중단했습니다.", "warn"); }
     else { el("runStatus").textContent = "오류"; toast(err.message || "보완 실패", "error"); }
