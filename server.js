@@ -492,7 +492,20 @@ async function handleChapter(req, res) {
   }
 }
 
+// CSRF 방어: 변경 요청(POST/DELETE 등)의 Origin이 호스트와 다르면 거부한다.
+// 비브라우저 클라이언트(curl 등)는 Origin 헤더가 없어 통과한다. (읽기 GET은 CORS가 응답을 막으므로 제외)
+function isSameOrigin(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try { return new URL(origin).host === (req.headers.host || ""); }
+  catch { return false; }
+}
+
 async function handleApi(req, res, pathname) {
+  if (req.method !== "GET" && req.method !== "HEAD" && !isSameOrigin(req)) {
+    return sendJson(res, 403, { ok: false, error: "교차 출처 요청이 차단되었습니다." });
+  }
+
   if (req.method === "GET" && pathname === "/api/health") {
     return sendJson(res, 200, {
       ok: true,
@@ -625,7 +638,9 @@ async function handleRequest(req, res) {
     });
     fs.createReadStream(filePath).pipe(res);
   } catch (error) {
-    if (!res.headersSent) sendJson(res, 500, { ok: false, error: error.message });
+    // 내부 상세(경로·스택)를 클라이언트에 노출하지 않는다. 상세는 서버 로그로.
+    console.error("[요청 처리 오류]", error?.message || error);
+    if (!res.headersSent) sendJson(res, 500, { ok: false, error: "서버 내부 오류" });
     else res.end();
   }
 }

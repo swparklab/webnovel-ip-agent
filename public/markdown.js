@@ -9,7 +9,14 @@
       .replaceAll("&", "&amp;")
       .replaceAll("<", "&lt;")
       .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&#39;");
+  }
+
+  // 안전한 링크 스킴만 허용(allowlist). javascript:/data:/vbscript: 등은 href를 떼고 텍스트만 남긴다.
+  function safeHref(url) {
+    const u = String(url).trim();
+    return /^(https?:\/\/|mailto:|tel:|#|\/(?!\/)|\.\/|\.\.\/)/i.test(u);
   }
 
   function inline(text) {
@@ -17,7 +24,10 @@
     t = t.replace(/`([^`]+)`/g, "<code>$1</code>");
     t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
     t = t.replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>");
-    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+    t = t.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (m, label, url) =>
+      safeHref(url)
+        ? `<a href="${url.trim()}" target="_blank" rel="noopener noreferrer">${label}</a>`
+        : `<a>${label}</a>`); // 위험 스킴 → 링크 비활성(텍스트만)
     return t;
   }
 
