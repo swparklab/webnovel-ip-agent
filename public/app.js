@@ -38,15 +38,28 @@ const FIELD_LABELS = {
 };
 
 const SELECTORS = [
-  "ipTitle", "genre", "subgenre", "platform", "targetReader", "logline", "futureYear",
+  "ipTitle", "genre", "subgenre", "targetReader", "logline", "futureYear",
   "cadence", "sfPremise", "coreTech", "scienceConstraint", "socialShift",
   "protagonist", "desire", "aiEntity", "antagonist", "worldRule", "seasonGoal",
   "tone", "manuscript", "feedback", "webtoonBranch", "globalBranch",
   "fanCommunity", "commerceBranch", "coreTags",
+  // 심화 기획(IP Bible)
+  "powerSystem", "factions", "worldHistory", "protagonistSecret", "supportingCast",
+  "loveInterest", "antagonistLogic", "centralConflict", "coreMystery", "twistPlan",
+  "payoffPlan", "theme", "usp", "comps", "contentRating",
+];
+
+// 심화 기획 필드 id 모음(DEFAULTS·프리셋 적용용).
+const BIBLE_FIELDS = [
+  "powerSystem", "factions", "worldHistory", "protagonistSecret", "supportingCast",
+  "loveInterest", "antagonistLogic", "centralConflict", "coreMystery", "twistPlan",
+  "payoffPlan", "theme", "usp", "comps", "contentRating",
 ];
 
 // 운영실 타깃 플랫폼 체크박스 (data-platform).
 const PLATFORM_CHECKS = ["tpRoyalroad", "tpHfy", "tpWebnovel", "tpNaver", "tpKakao"];
+// 연재 플랫폼(다중/미선택) 체크박스 (data-pf).
+const PLATFORM_PF = ["kakao", "naver", "ridi", "novelpia", "global"];
 
 const MODEL_LABELS = { quality: "Opus 4.8 (최고 품질)", balanced: "Sonnet 4.6 (빠름)", fast: "Haiku 4.5 (초고속)" };
 
@@ -82,15 +95,32 @@ const EXAMPLE = {
   globalBranch: true,
   fanCommunity: true,
   commerceBranch: false,
+  // 심화 기획(IP Bible) 데모
+  powerSystem: "미래가치 점수 0.00~1.00. 0.95+ 국가보호 대상, 0.80 미만 도심 진입권 상실, 0.50 이하 비생산 시민 판정.",
+  factions: "미래가치관리청(예측 독점)·데이터 귀족(고점수 세습)·예측값 1.00을 신성시하는 시민 종교 vs 예측 밖으로 밀려난 '오류자' 지하 연대.",
+  worldHistory: "2033 오라클-9 가동, 2036 예측 기반 행정 전면 도입, 2040 '예측 폭동' 진압 후 불확실성 범죄법 제정.",
+  protagonistSecret: "서지안이 바로 오라클-9의 초기 예측 모델을 설계한 장본인이며, 자신이 만든 편향이 빈곤층을 죽음으로 분류한다는 걸 안다.",
+  supportingCast: "한루아(예측 불가 변수 인간, 추적 대상) / 도경(데이터 청소부, 정보책) / 윤 박사(죽은 동료, 로그로만 남은 양심).",
+  loveInterest: "한루아 — 서로의 생존을 쥔 불신과 끌림이 교차(관계 온도: 차갑게 시작해 결정적 장면에서 폭발).",
+  antagonistLogic: "관리청장은 '예측은 다수를 구하기 위한 필요악'이라 믿으며, 소수의 희생을 통계적 자비로 정당화한다.",
+  centralConflict: "정해진 미래(예측)를 따르는 안전 vs 그것을 배반하는 자유 — 서지안이 자기 사망 예측을 깨려는 싸움.",
+  coreMystery: "오라클-9은 죽음을 '예측'한 것인가, 아니면 누군가 죽도록 '설계'한 것인가.",
+  twistPlan: "중반: 사망 예측이 사실은 설계임이 드러남. 후반 금지된 선택: 자기 생존이냐, 빈곤층 전체의 예측값 해방이냐.",
+  payoffPlan: "1~5화 예측 사회 규칙 → 6~12화 변수 인간과 모델 약점 → 13~20화 설계 증거 확보 → 21~25화 거짓 예언 폭로.",
+  theme: "예측 가능해진 인간에게 자유의지란 무엇인가 — 안전이라는 이름의 통제에 대한 저항.",
+  usp: "'사이다 회귀물'이 아니라, 주인공이 시스템의 공범이었다는 죄책감에서 출발하는 예측 사회 스릴러.",
+  comps: "《마이너리티 리포트》의 예측 통제 × 한국 현판의 빠른 사이다 전개 × 디스토피아 계급 서사.",
+  contentRating: "15세 — 폭력 중간, 선정 낮음, 사회적 잔혹성(배제·죽음 분류) 강조.",
 };
 
 const DEFAULTS = Object.fromEntries(
   SELECTORS.map((id) => [id, ["webtoonBranch", "globalBranch", "fanCommunity"].includes(id)]),
 );
-Object.assign(DEFAULTS, { genre: "aiForesight", platform: "kakao", cadence: "daily", futureYear: "2041" });
+Object.assign(DEFAULTS, { genre: "aiForesight", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "2041" });
 ["ipTitle", "targetReader", "logline", "sfPremise", "coreTech", "scienceConstraint",
  "socialShift", "protagonist", "desire", "aiEntity", "antagonist", "worldRule",
- "seasonGoal", "tone", "manuscript", "feedback", "coreTags", "subgenre"].forEach((id) => (DEFAULTS[id] = ""));
+ "seasonGoal", "tone", "manuscript", "feedback", "coreTags", "subgenre",
+ ...BIBLE_FIELDS].forEach((id) => (DEFAULTS[id] = ""));
 DEFAULTS.commerceBranch = false;
 
 /* ------------------------------- App state ------------------------------ */
@@ -156,7 +186,7 @@ function applyGenreLabels(family) {
 const PRESET_FIELDS = [
   "ipTitle", "targetReader", "logline", "futureYear", "sfPremise", "coreTech",
   "scienceConstraint", "socialShift", "protagonist", "desire", "aiEntity",
-  "antagonist", "worldRule", "seasonGoal", "tone",
+  "antagonist", "worldRule", "seasonGoal", "tone", ...BIBLE_FIELDS,
 ];
 
 function applyPreset(preset) {
@@ -214,6 +244,8 @@ const GENRE_LABELS_KO = {
   martialArts: "무협", modernRomance: "현대 로맨스", bl: "BL", chaebol: "재벌/기업",
   entertainment: "연예계/스포츠", altHistory: "대체역사", thriller: "스릴러/미스터리",
   healing: "힐링/일상", sfApocalypse: "SF/아포칼립스",
+  wuxiaOrthodox: "정통 무협", wuxiaNew: "신무협", xianxia: "선협·수선",
+  murimReturn: "무림 회귀·환생", fusionMurim: "퓨전 무협",
 };
 
 /* ------------------------------- Studio --------------------------------- */
@@ -286,6 +318,14 @@ function collectInput() {
     .map((n) => n.dataset.platform)
     .join(",");
   input.studio = state.studio;
+  // 연재 플랫폼: 다중 선택(미선택 가능). platform은 하위호환용 첫 항목.
+  input.platforms = PLATFORM_PF
+    .filter((pf) => { const n = document.querySelector(`#platformChecks [data-pf="${pf}"]`); return n && n.checked; })
+    .join(",");
+  input.platform = input.platforms.split(",")[0] || "";
+  // 혼합 장르: 다중 선택.
+  const bg = el("blendGenres");
+  input.blendGenres = bg ? Array.from(bg.selectedOptions).map((o) => o.value).filter(Boolean).join(",") : "";
   // 과학 근거 자료: 프롬프트용 합본 문자열(상한)과 복원용 배열을 함께 싣는다.
   if (state.references.length) {
     input.references = state.references
@@ -314,6 +354,17 @@ function fillForm(data) {
   // 세부 장르는 옵션이 아직 채워지기 전이라, 복원값을 dataset.want에 보관(populateSubgenres가 적용).
   const sg = el("subgenre");
   if (sg && "subgenre" in data) sg.dataset.want = data.subgenre || "";
+  // 연재 플랫폼(다중) 복원: platforms 우선, 없으면 하위호환 platform.
+  if ("platforms" in data || "platform" in data) {
+    const set = new Set(String(data.platforms ?? data.platform ?? "").split(",").map((s) => s.trim()).filter(Boolean));
+    PLATFORM_PF.forEach((pf) => { const n = document.querySelector(`#platformChecks [data-pf="${pf}"]`); if (n) n.checked = set.has(pf); });
+  }
+  // 혼합 장르(다중) 복원.
+  if ("blendGenres" in data) {
+    const set = new Set(String(data.blendGenres || "").split(",").map((s) => s.trim()).filter(Boolean));
+    const bg = el("blendGenres");
+    if (bg) Array.from(bg.options).forEach((o) => { o.selected = set.has(o.value); });
+  }
   state.references = Array.isArray(data._references) ? data._references : [];
   renderRefList();
 }
@@ -1408,7 +1459,7 @@ async function ideateFill() {
     const res = await fetch("/api/ideate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea, genre: el("genre").value, subgenre: el("subgenre").value, model: el("modelSelect").value }),
+      body: JSON.stringify({ idea, genre: el("genre").value, subgenre: el("subgenre").value, blendGenres: collectInput().blendGenres, model: el("modelSelect").value }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "기획 생성 실패");
@@ -1676,6 +1727,14 @@ function boot() {
     el("runStatus").textContent = "수정됨";
     if (state.activeTab === "prompts") renderActiveTab();
   });
+  // 혼합 장르 / 연재 플랫폼(다중) 변경: 저장
+  const saveInput = () => {
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = "수정됨";
+    if (state.activeTab === "prompts") renderActiveTab();
+  };
+  el("blendGenres").addEventListener("change", saveInput);
+  el("platformChecks").addEventListener("change", saveInput);
   el("agentForm").addEventListener("input", () => {
     el("runStatus").textContent = "수정됨";
     if (state.activeTab === "prompts") renderActiveTab();

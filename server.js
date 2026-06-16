@@ -71,8 +71,8 @@ function readBody(req, maxBytes = 4_000_000) {
   });
 }
 
-async function readJson(req) {
-  const body = await readBody(req);
+async function readJson(req, maxBytes) {
+  const body = await readBody(req, maxBytes);
   if (!body) return {};
   return JSON.parse(body);
 }
@@ -288,6 +288,7 @@ async function handleIdeate(req, res) {
   const idea = String(payload.idea || "").trim();
   const genre = payload.genre || "aiForesight";
   const subgenre = payload.subgenre || "";
+  const blendGenres = payload.blendGenres || "";
   const model = payload.model || config.defaultModel;
   if (!idea) return sendJson(res, 400, { ok: false, error: "아이디어를 입력하세요." });
 
@@ -296,14 +297,14 @@ async function handleIdeate(req, res) {
     return sendJson(res, 200, { ok: true, fallback: true, fields: localIdeate(idea, genre, subgenre) });
   }
   try {
-    const { system, user } = buildIdeatePrompt(idea, genre, subgenre);
+    const { system, user } = buildIdeatePrompt(idea, genre, subgenre, blendGenres);
     const { text } = await streamMessage({
       provider: mode, // 'api' | 'cli'
       model,
       system,
       messages: [{ role: "user", content: user }],
       temperature: 0.7,
-      maxTokens: 2000,
+      maxTokens: 4000, // 심화 기획(IP Bible)까지 채우므로 넉넉히
     });
     const fields = extractFields(text);
     if (!fields) {
@@ -425,10 +426,10 @@ async function handleApi(req, res, pathname) {
       subgenre,
       playbook: getPlaybook(genre, subgenre),
       common: {
-        hitStages: COMMON.hitStages,
+        hitStages: COMMON.successFlow,
         designPrinciple: COMMON.designPrinciple,
         failurePatterns: COMMON.failurePatterns,
-        checklist: COMMON.checklist,
+        checklist: COMMON.evalRubric,
       },
       platformPriority: PLATFORM_PRIORITY,
     });

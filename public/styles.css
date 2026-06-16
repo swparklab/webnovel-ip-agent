@@ -325,3 +325,9 @@ textarea { min-height: 80px; padding: 10px 11px; resize: vertical; line-height: 
 .audit-good li { color: var(--ink); }
 .audit-none { color: var(--muted); margin: 2px 0; }
 .audit-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+/* ----- 혼합 장르 멀티셀렉트 ----- */
+#blendGenres { padding: 4px; }
+#blendGenres option { padding: 3px 6px; border-radius: 4px; }
+#blendGenres option:checked { background: var(--green) linear-gradient(0deg, var(--green), var(--green)); color: #fff; }
+#platformChecks { margin-top: 6px; }

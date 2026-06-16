@@ -59,8 +59,7 @@
             <p class="section-note">Core IP</p>
             <label class="field"><span>IP 제목</span>
               <input id="ipTitle" name="ipTitle" autocomplete="off" placeholder="예: 예언값 0.81의 도시" /></label>
-            <div class="field-pair">
-              <label class="field"><span>장르</span>
+            <label class="field"><span>주 장르</span>
                 <select id="genre" name="genre">
                   <optgroup label="웹소설 메인 장르">
                     <option value="romanceFantasy">로맨스판타지</option>
@@ -84,21 +83,54 @@
                     <option value="space">우주 개척 SF</option>
                     <option value="solarpunk">솔라펑크</option>
                   </optgroup>
+                  <optgroup label="무협 특화 (세부 스타일)">
+                    <option value="wuxiaOrthodox">정통 무협</option>
+                    <option value="wuxiaNew">신무협</option>
+                    <option value="xianxia">선협 · 수선</option>
+                    <option value="murimReturn">무림 회귀 · 환생</option>
+                    <option value="fusionMurim">퓨전 무협 (시스템·이세계)</option>
+                  </optgroup>
                 </select></label>
-              <label class="field"><span>플랫폼</span>
-                <select id="platform" name="platform">
-                  <option value="kakao">카카오페이지</option>
-                  <option value="naver">네이버시리즈</option>
-                  <option value="ridi">리디</option>
-                  <option value="novelpia">노벨피아</option>
-                  <option value="global">글로벌 동시 기획</option>
-                </select></label>
-            </div>
             <label class="field"><span>세부 장르 (성공 방정식)</span>
               <select id="subgenre" name="subgenre">
                 <option value="">(세부 장르 자동 — 메인 장르 기본)</option>
               </select></label>
             <p class="section-hint" id="subgenreFormula"></p>
+            <label class="field"><span>혼합 장르 (여러 개 — 주 장르에 융합)</span>
+              <select id="blendGenres" name="blendGenres" multiple size="6">
+                <option value="romanceFantasy">로맨스판타지</option>
+                <option value="modernFantasy">현대판타지/헌터/시스템</option>
+                <option value="academyFantasy">판타지/아카데미/게임판타지</option>
+                <option value="martialArts">무협</option>
+                <option value="modernRomance">현대 로맨스</option>
+                <option value="bl">BL</option>
+                <option value="chaebol">재벌/기업/전문직</option>
+                <option value="entertainment">연예계/아이돌/스포츠</option>
+                <option value="altHistory">대체역사/전쟁/밀리터리</option>
+                <option value="thriller">스릴러/미스터리/공포</option>
+                <option value="healing">힐링/일상/요리/농장</option>
+                <option value="sfApocalypse">SF/디스토피아/아포칼립스</option>
+                <option value="aiForesight">AI 미래예측 SF</option>
+                <option value="cyberpunk">사이버펑크</option>
+                <option value="posthuman">포스트휴먼</option>
+                <option value="climate">기후 SF</option>
+                <option value="space">우주 개척 SF</option>
+                <option value="solarpunk">솔라펑크</option>
+                <option value="wuxiaOrthodox">정통 무협</option>
+                <option value="wuxiaNew">신무협</option>
+                <option value="xianxia">선협 · 수선</option>
+                <option value="murimReturn">무림 회귀 · 환생</option>
+                <option value="fusionMurim">퓨전 무협 (시스템·이세계)</option>
+              </select></label>
+            <p class="section-hint">Ctrl(⌘)+클릭으로 여러 장르를 함께 선택. 비우면 주 장르만 적용됩니다.</p>
+            <div class="field"><span>연재 플랫폼 (여러 개 선택 / 미선택 가능)</span>
+              <div class="switches" id="platformChecks" aria-label="연재 플랫폼">
+                <label class="switch"><input type="checkbox" data-pf="kakao" /><span>카카오페이지</span></label>
+                <label class="switch"><input type="checkbox" data-pf="naver" /><span>네이버시리즈</span></label>
+                <label class="switch"><input type="checkbox" data-pf="ridi" /><span>리디</span></label>
+                <label class="switch"><input type="checkbox" data-pf="novelpia" /><span>노벨피아</span></label>
+                <label class="switch"><input type="checkbox" data-pf="global" /><span>글로벌</span></label>
+              </div></div>
             <label class="field"><span>타깃 독자</span>
               <input id="targetReader" name="targetReader" autocomplete="off" placeholder="예: AI 미래, 계급 역전, 빠른 전개를 좋아하는 독자" /></label>
             <label class="field"><span>한 줄 콘셉트</span>
@@ -147,6 +179,12 @@
               <textarea id="scienceConstraint" name="scienceConstraint" rows="3" placeholder="그 장치가 마음대로 되지 않는 이유·대가·한계"></textarea></label>
             <label class="field"><span data-label="socialShift">세계 · 사회 · 관계 구조</span>
               <textarea id="socialShift" name="socialShift" rows="3" placeholder="신분·계급·권력·가족·관계가 어떻게 작동하고 주인공을 압박하는지"></textarea></label>
+            <label class="field"><span>힘 · 능력 체계 (성장 등급)</span>
+              <textarea id="powerSystem" name="powerSystem" rows="2" placeholder="예: 미래가치 점수 0~1(0.95+ 국가보호) / 헌터 F~SSS급 / 무공 삼류~화경"></textarea></label>
+            <label class="field"><span>핵심 세력 · 진영</span>
+              <textarea id="factions" name="factions" rows="2" placeholder="주인공을 둘러싼 대립 조직·가문·국가·기업과 그 이해관계"></textarea></label>
+            <label class="field"><span>세계 이전사 / 핵심 연표</span>
+              <textarea id="worldHistory" name="worldHistory" rows="2" placeholder="작품 이전에 벌어진 결정적 사건 1~3개"></textarea></label>
           </div>
 
           <div class="form-section prod-only">
@@ -161,12 +199,46 @@
               <input id="aiEntity" name="aiEntity" autocomplete="off" placeholder="예: 도시 AI 오라클-9 / 집착 남주 / 상태창 시스템 (없으면 비워둠)" /></label>
             <label class="field"><span>적대 압력</span>
               <input id="antagonist" name="antagonist" autocomplete="off" placeholder="예: 알고리즘 신분제, AI 규제청, 데이터 귀족" /></label>
+            <label class="field"><span>적대자의 목적 · 논리 ('왜')</span>
+              <textarea id="antagonistLogic" name="antagonistLogic" rows="2" placeholder="적대자가 스스로 정당하다고 믿는 이유"></textarea></label>
+            <label class="field"><span>주인공의 비밀 · 치명적 약점</span>
+              <textarea id="protagonistSecret" name="protagonistSecret" rows="2" placeholder="남들이 모르는 비밀, 치명적 약점, 숨긴 과거"></textarea></label>
+            <label class="field"><span>조력자 · 동료 (이름·역할)</span>
+              <textarea id="supportingCast" name="supportingCast" rows="2" placeholder="예: 한지우(해커, 정보책) / 노교수(스승, 양심)"></textarea></label>
+            <label class="field"><span>관계 상대 · 히로인 (관계 온도)</span>
+              <input id="loveInterest" name="loveInterest" autocomplete="off" placeholder="관계 상대와 둘 사이의 긴장·감정 온도 (없으면 비워둠)" /></label>
             <label class="field"><span>세계 규칙</span>
               <textarea id="worldRule" name="worldRule" rows="3" placeholder="이 세계에서 반복 작동하는 규칙, 금기, 보상, 비용"></textarea></label>
             <label class="field"><span>시즌 목표</span>
               <input id="seasonGoal" name="seasonGoal" autocomplete="off" placeholder="예: 25화 안에 도시 예측 모델의 거짓 양성을 폭로한다" /></label>
             <label class="field"><span>톤 앤 매너</span>
               <input id="tone" name="tone" autocomplete="off" placeholder="예: 차갑고 빠른 문장, 감정은 절제, 절단은 강하게" /></label>
+          </div>
+
+          <div class="form-section prod-only">
+            <p class="section-note">Narrative Design</p>
+            <label class="field"><span>중심 갈등 (한 줄)</span>
+              <input id="centralConflict" name="centralConflict" autocomplete="off" placeholder="작품 전체를 관통하는 핵심 대립" /></label>
+            <label class="field"><span>중심 떡밥 / 미스터리</span>
+              <textarea id="coreMystery" name="coreMystery" rows="2" placeholder="끝까지 끌고 갈 핵심 의문·비밀"></textarea></label>
+            <label class="field"><span>계획된 반전 · 금지된 선택</span>
+              <textarea id="twistPlan" name="twistPlan" rows="2" placeholder="예정된 큰 반전과 주인공을 찢는 딜레마"></textarea></label>
+            <label class="field"><span>성장 · 떡밥 회수 계획</span>
+              <textarea id="payoffPlan" name="payoffPlan" rows="2" placeholder="성장 단계 슬로프와 떡밥을 언제 어떻게 회수할지"></textarea></label>
+          </div>
+
+          <div class="form-section prod-only">
+            <p class="section-note">Theme &amp; Market</p>
+            <label class="field"><span>주제의식 / 메시지</span>
+              <textarea id="theme" name="theme" rows="2" placeholder="이 작품이 결국 무엇에 대한 이야기인가"></textarea></label>
+            <div class="field-pair">
+              <label class="field"><span>차별점 (한 끗)</span>
+                <input id="usp" name="usp" autocomplete="off" placeholder="유사작과 다른 결정적 차별점" /></label>
+              <label class="field"><span>연령등급 / 수위</span>
+                <input id="contentRating" name="contentRating" autocomplete="off" placeholder="전체 / 15 / 19, 잔혹·선정 정도" /></label>
+            </div>
+            <label class="field"><span>비교작 / 레퍼런스</span>
+              <input id="comps" name="comps" autocomplete="off" placeholder="예: 'A의 세계관 × B의 전개 속도'" /></label>
           </div>
 
           <div class="form-section">
