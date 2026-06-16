@@ -216,6 +216,14 @@ const PRESET_FIELDS = [
   "antagonist", "worldRule", "seasonGoal", "tone", ...BIBLE_FIELDS,
 ];
 
+// 제작도 점수를 만드는 핵심 필드 [id, 라벨, 배점] — server의 scoreInput과 동일 가중치.
+const SCORE_FIELDS = [
+  ["sfPremise", "작품 명제", 12], ["coreTech", "핵심 소재·장치", 12], ["scienceConstraint", "핵심 제약·규칙", 11],
+  ["logline", "로그라인", 10], ["socialShift", "세계·사회·관계", 9], ["worldRule", "세계 규칙", 8],
+  ["protagonist", "주인공", 7], ["desire", "핵심 욕망", 7], ["aiEntity", "핵심 존재", 7],
+  ["ipTitle", "제목", 6], ["antagonist", "적대 압력", 6], ["seasonGoal", "시즌 목표", 5],
+];
+
 function applyPreset(preset) {
   if (!preset) return;
   PRESET_FIELDS.forEach((f) => {
@@ -261,6 +269,7 @@ async function onGenreChange(fillPreset) {
     toast(`${GENRE_LABELS_KO[genre] || genre} 장르 예시를 불러왔습니다.`, "info");
   }
   if (state.activeTab === "prompts") renderActiveTab();
+  if (typeof updateJourney === "function") updateJourney();
 }
 
 // 드롭다운 표시용 한글 라벨
@@ -328,10 +337,128 @@ function setStudio(studio, opts = {}) {
   renderTabs();
   setActiveTab(AGENTS[0].id);
   localStorage.setItem("sfAgentStudio", studio);
+  el("readinessPanel").hidden = true;
+  updateJourney();
   if (!opts.silent) {
     el("runStatus").textContent = meta.status;
     toast(meta.toast, "info");
+    // 핸드오프 안내: 운영/사업실 진입 시 현재 작품 상태에 맞춘 한마디.
+    if ((studio === "platform" || studio === "business")) {
+      const hasIP = SCORE_FIELDS.some(([k]) => el(k) && el(k).value.trim()) || Object.keys(state.buffers).length;
+      toast(hasIP ? "현재 작품 IP로 이어서 분석합니다." : "먼저 제작실에서 작품을 만들거나 프로젝트를 불러오세요.", hasIP ? "info" : "warn");
+    }
   }
+}
+
+/* --------------------------- 진행 가이드 (스텝퍼·제작도) --------------------------- */
+
+// 폼 입력 기반 제작도(서버 scoreInput과 동일 가중치). 실시간으로 칩을 갱신한다.
+function clientScore() {
+  const input = collectInput();
+  let s = 0;
+  SCORE_FIELDS.forEach(([k, , w]) => { if (String(input[k] || "").trim()) s += w; });
+  if (input.manuscript) s += 4;
+  if (input.feedback) s += 3;
+  ["webtoonBranch", "globalBranch", "fanCommunity", "commerceBranch"].forEach((b) => { if (input[b]) s += 1.5; });
+  return Math.max(0, Math.min(100, Math.round(s)));
+}
+
+function missingScoreFields() {
+  return SCORE_FIELDS.filter(([k]) => !(el(k) && el(k).value.trim()));
+}
+
+// 스튜디오별 단계 + 다음 추천 행동.
+function journeySteps() {
+  const ran = Object.keys(state.buffers).length > 0;
+  const hasIP = SCORE_FIELDS.some(([k]) => el(k) && el(k).value.trim());
+  if (state.studio === "platform" || state.studio === "business") {
+    const label = state.studio === "platform" ? "운영 분석" : "사업 분석";
+    const steps = [
+      { label: "작품 준비", done: hasIP, current: !hasIP },
+      { label, done: ran, current: hasIP && !ran },
+    ];
+    const next = !hasIP
+      ? { text: `제작실에서 작품을 만들거나 불러온 뒤 ${label}을 실행하세요.` }
+      : !ran ? { text: `준비 완료. ‘${STUDIO_META[state.studio].run}’을 누르세요.`, action: "run" }
+        : { text: `${label} 완료. 위 탭에서 결과를 확인하세요.` };
+    return { steps, next };
+  }
+  const score = clientScore();
+  const planned = score >= 60;
+  const serialized = currentMaxChapter() > 1;
+  const steps = [
+    { label: "진단", done: !!state.lastImpact, current: false },
+    { label: "기획", done: planned, current: !planned },
+    { label: "제작", done: ran, current: planned && !ran },
+    { label: "회차", done: serialized, current: ran && !serialized },
+  ];
+  let next;
+  if (!planned) next = { text: score > 0 ? `기획 ${score}% — ‘🧩 빈 칸만 AI로 채우기’로 마저 채우세요.` : `아는 항목을 적고 ‘🧩 빈 칸만 AI로 채우기’를 누르세요.`, action: "complete" };
+  else if (!ran) next = { text: `기획 완성. ‘${STUDIO_META[state.studio].run}’으로 작품을 생성하세요.`, action: "run" };
+  else if (!serialized) next = { text: `초안 완성. ‘원고’ 탭에서 다음 회차를 이어 쓰세요.`, action: "draftTab" };
+  else next = { text: `연재 진행 중 — 운영실·사업실에서 유통·수익화로 확장하세요.` };
+  return { steps, next };
+}
+
+const STEP_ACT_LABEL = { complete: "🧩 빈 칸 채우기", run: "▶ 실행", draftTab: "원고 탭" };
+function doStepAction(act) {
+  if (act === "complete") completeFill();
+  else if (act === "run") runAgent();
+  else if (act === "draftTab") setActiveTab("draft");
+}
+
+function renderStepper() {
+  const host = el("stepper");
+  if (!host) return;
+  const { steps, next } = journeySteps();
+  const items = steps.map((s, i) =>
+    `<div class="step ${s.done ? "done" : s.current ? "current" : ""}"><span class="step-dot">${s.done ? "✓" : i + 1}</span><span class="step-label">${s.label}</span></div>`
+  ).join('<span class="step-arrow">→</span>');
+  const actBtn = next.action ? `<button class="mini primary" id="stepAction" data-act="${next.action}">${STEP_ACT_LABEL[next.action]}</button>` : "";
+  host.innerHTML = `<div class="steps">${items}</div><div class="step-next"><span class="step-next-k">다음</span> ${escapeHtml(next.text)} ${actBtn}</div>`;
+  const b = el("stepAction");
+  if (b) b.addEventListener("click", () => doStepAction(b.dataset.act));
+}
+
+function renderReadinessPanel() {
+  const host = el("readinessPanel");
+  if (!host) return;
+  const missing = missingScoreFields();
+  if (!missing.length) {
+    host.innerHTML = `<div class="rp-empty">✓ 핵심 항목을 모두 채웠습니다 (제작도 100%).</div>`;
+    return;
+  }
+  const lost = missing.reduce((a, [, , w]) => a + w, 0);
+  const rows = missing.map(([k, label, w]) =>
+    `<button class="rp-row" type="button" data-focus="${k}"><span>${label}</span><span class="rp-w">+${w}%</span></button>`
+  ).join("");
+  host.innerHTML =
+    `<div class="rp-head">비어서 제작도를 깎는 항목 <strong>${missing.length}개</strong> · 최대 <strong>+${Math.round(lost)}%</strong>
+      <button class="mini primary" id="rpFill" type="button">🧩 빈 칸 모두 채우기</button></div>
+     <div class="rp-rows">${rows}</div>`;
+  host.querySelectorAll("[data-focus]").forEach((bt) => bt.addEventListener("click", () => {
+    const n = el(bt.dataset.focus);
+    if (n) { n.focus(); n.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  }));
+  const fill = el("rpFill");
+  if (fill) fill.addEventListener("click", () => { completeFill(); });
+}
+
+function toggleReadinessPanel() {
+  const p = el("readinessPanel");
+  if (!p) return;
+  p.hidden = !p.hidden;
+  if (!p.hidden) renderReadinessPanel();
+}
+
+// 폼/상태 변화 시 칩·스텝퍼·(열려있으면)제작도 패널을 한 번에 갱신.
+function updateJourney() {
+  const sc = clientScore();
+  state.score = sc;
+  const chip = el("readinessChip");
+  if (chip) chip.textContent = `제작도 ${sc}%`;
+  renderStepper();
+  if (el("readinessPanel") && !el("readinessPanel").hidden) renderReadinessPanel();
 }
 
 /* ------------------------------- Helpers -------------------------------- */
@@ -648,8 +775,7 @@ function resetRun() {
 function handleEvent(type, data) {
   switch (type) {
     case "meta":
-      state.score = data.score ?? state.score;
-      el("readinessChip").textContent = `제작도 ${state.score}%`;
+      updateJourney();
       break;
     case "start":
       state.lastModel = data.model;
@@ -671,10 +797,7 @@ function handleEvent(type, data) {
     case "done":
     case "final":
       if (data.usage) { state.usage = data.usage; updateUsage(); }
-      if (data.score != null) {
-        state.score = data.score;
-        el("readinessChip").textContent = `제작도 ${state.score}%`;
-      }
+      updateJourney(); // 제작 단계 완료 → 스텝퍼·제작도 갱신
       break;
     case "error":
       toast(data.message || "오류가 발생했습니다.", "error");
@@ -956,6 +1079,7 @@ async function reviseFromAudit() {
     state.chapterController = null;
     state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    updateJourney(); // 회차 변화 후 진행 가이드 갱신
   }
 }
 
@@ -1357,6 +1481,7 @@ async function runChapterLoop(from, toEnd) {
     state.chapterController = null;
     state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    updateJourney(); // 회차 변화 후 진행 가이드 갱신
   }
 }
 
@@ -1441,6 +1566,7 @@ async function autopilot() {
     state.chapterController = null;
     state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    updateJourney(); // 회차 변화 후 진행 가이드 갱신
   }
 }
 
@@ -1524,6 +1650,7 @@ async function applyFeedback(n) {
     state.chapterController = null;
     state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    updateJourney(); // 회차 변화 후 진행 가이드 갱신
   }
 }
 
@@ -1553,6 +1680,7 @@ async function reviseAll() {
     state.chapterController = null;
     state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    updateJourney(); // 회차 변화 후 진행 가이드 갱신
   }
 }
 
@@ -1581,6 +1709,7 @@ async function reviseChapter(n, note) {
     state.chapterController = null;
     state.streamingChapter = null;
     if (state.activeTab === "draft") renderDraftStudio(el("outputPanel"));
+    updateJourney(); // 회차 변화 후 진행 가이드 갱신
   }
 }
 
@@ -1623,6 +1752,7 @@ async function ideateFill() {
     await onGenreChange(false);
     if (el("ipTitle").value) el("workspaceTitle").textContent = el("ipTitle").value;
     localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    updateJourney();
 
     el("runStatus").textContent = data.fallback ? "기획 채움(폴백)" : "기획 채움";
     toast(
@@ -1683,6 +1813,7 @@ async function completeFill() {
     });
     if (el("ipTitle").value) el("workspaceTitle").textContent = el("ipTitle").value;
     localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    updateJourney();
     el("runStatus").textContent = applied ? "빈 칸 보강 완료" : "보강 없음";
     toast(
       applied
@@ -1889,10 +2020,9 @@ async function openProject(id) {
       if (p.report.chapters) state.chapters = { ...p.report.chapters };
       state.memories = (p.report.memories && typeof p.report.memories === "object") ? { ...p.report.memories } : {};
     }
-    state.score = p.score ?? 0;
-    el("readinessChip").textContent = `제작도 ${state.score}%`;
     el("workspaceTitle").textContent = p.title || (STUDIO_META[state.studio] || STUDIO_META.production).title;
     setActiveTab(AGENTS[0].id);
+    updateJourney();
     toast("프로젝트를 불러왔습니다.", "success");
   } catch (err) {
     toast(err.message || "불러오기 실패", "error");
@@ -1907,10 +2037,9 @@ function newProject() {
   if (state.studio === "foresight") { const g = el("genre"); if (g) g.value = "aiForesight"; }
   if (state.studio !== "platform") onGenreChange(false); // 적응형 라벨 갱신(제작·박성우)
   el("workspaceTitle").textContent = (STUDIO_META[state.studio] || STUDIO_META.production).title;
-  state.score = 0;
-  el("readinessChip").textContent = "제작도 0%";
   resetRun();
   setActiveTab(AGENTS[0].id);
+  updateJourney();
 }
 
 async function deleteProject() {
@@ -2059,8 +2188,11 @@ function boot() {
   el("platformChecks").addEventListener("change", saveInput);
   el("agentForm").addEventListener("input", () => {
     el("runStatus").textContent = "수정됨";
+    updateJourney(); // 입력할 때마다 제작도·스텝퍼 실시간 갱신
     if (state.activeTab === "prompts") renderActiveTab();
   });
+  // 제작도 칩 클릭 → 빈 항목 패널 토글
+  el("readinessChip").addEventListener("click", toggleReadinessPanel);
 
   AGENTS.forEach((a) => { state.statuses[a.id] = "idle"; });
   setActiveTab("foresight");
@@ -2068,11 +2200,12 @@ function boot() {
   loadProjects();
   // 초기 장르에 맞춰 라벨만 적용 (프리셋은 덮어쓰지 않음)
   onGenreChange(false);
-  // 마지막으로 쓰던 스튜디오 복원 (production·platform·foresight)
+  // 마지막으로 쓰던 스튜디오 복원 (production·platform·foresight·business)
   const savedStudio = localStorage.getItem("sfAgentStudio");
   if (savedStudio && STUDIOS[savedStudio] && savedStudio !== "production") {
     setStudio(savedStudio, { silent: true });
   }
+  updateJourney(); // 초기 렌더
 }
 
 document.addEventListener("DOMContentLoaded", boot);

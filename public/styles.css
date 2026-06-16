@@ -425,3 +425,32 @@ body.studio-foresight #brandEyebrow { color: #2f6db0; }
 .business-intro .section-note { color: #a55f00; }
 body.studio-business .studio-btn.active { color: #a55f00; border-color: #a55f00; }
 body.studio-business #brandEyebrow { color: #a55f00; }
+
+/* ----- 진행 가이드: 스텝퍼 · 제작도 패널 ----- */
+.journey { display: grid; gap: 8px; }
+.stepper { background: rgba(255,255,255,0.94); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); padding: 12px 16px; display: grid; gap: 8px; }
+.steps { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.step { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-weight: 800; font-size: 0.84rem; }
+.step .step-dot { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: #d7ddda; color: #fff; font-size: 0.72rem; }
+.step.current { background: #fff4df; color: var(--amber); box-shadow: 0 0 0 2px rgba(165,95,0,0.18); }
+.step.current .step-dot { background: var(--amber); }
+.step.done { background: #e3f4ee; color: var(--green); }
+.step.done .step-dot { background: var(--green); }
+.step-arrow { color: var(--line-strong); font-weight: 900; }
+.step-next { font-size: 0.88rem; color: var(--ink); display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.step-next-k { font-weight: 900; color: var(--blue); }
+.mini.primary { border-color: var(--green); background: var(--green); color: #fff; }
+
+.chip-btn { cursor: pointer; border: 1px solid transparent; }
+.chip-btn:hover { border-color: var(--blue); }
+.readiness-panel { background: rgba(255,255,255,0.97); border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: var(--shadow); padding: 12px 14px; display: grid; gap: 8px; }
+.rp-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.86rem; flex-wrap: wrap; }
+.rp-rows { display: flex; flex-wrap: wrap; gap: 6px; }
+.rp-row { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); cursor: pointer; font-weight: 700; font-size: 0.82rem; }
+.rp-row:hover { border-color: var(--amber); }
+.rp-row .rp-w { color: var(--amber); font-weight: 900; }
+.rp-empty { color: var(--green); font-weight: 800; font-size: 0.88rem; }
+
+/* 빈 칸 채우기 버튼 강조(#4) */
+.complete-btn { border-color: var(--blue); color: var(--blue); font-weight: 800; }
+.complete-btn:hover { background: #eef4fb; }

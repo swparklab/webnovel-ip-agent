@@ -73,7 +73,7 @@
               <button class="command" id="ideateBtn" type="button" title="아이디어 한 줄에서 Core IP 전체를 새로 생성(기존 입력 덮어씀)">
                 <span>이 아이디어로 기획 채우기</span>
               </button>
-              <button class="command" id="completeBtn" type="button" title="내가 채운 항목은 그대로 두고, 비어 있는 칸만 AI가 일관되게 보강">
+              <button class="command complete-btn" id="completeBtn" type="button" title="내가 채운 항목은 그대로 두고, 비어 있는 칸만 AI가 일관되게 보강">
                 <span>🧩 빈 칸만 AI로 채우기</span>
               </button>
             </div>
@@ -294,9 +294,15 @@
               <select id="modelSelect" aria-label="LLM 모델"></select>
             </label>
             <span class="metric-chip" id="modeChip">모드 확인 중…</span>
-            <span class="metric-chip" id="readinessChip">제작도 0%</span>
+            <button class="metric-chip chip-btn" id="readinessChip" type="button" title="제작도를 깎는 빈 항목 보기">제작도 0%</button>
             <span class="metric-chip accent" id="usageChip">토큰 0</span>
           </div>
+        </section>
+
+        <!-- 진행 가이드: 단계 스텝퍼 + 다음 행동 + 제작도 빈칸 패널 -->
+        <section class="journey" aria-label="진행 가이드">
+          <div class="stepper" id="stepper"></div>
+          <div class="readiness-panel" id="readinessPanel" hidden></div>
         </section>
 
         <section class="notice" id="keyNotice" hidden>
