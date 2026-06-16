@@ -227,6 +227,78 @@ const SCORE_FIELDS = [
   ["ipTitle", "제목", 6], ["antagonist", "적대 압력", 6], ["seasonGoal", "시즌 목표", 5],
 ];
 
+/* --------- 서사 가중치(Narrative Steering) — lib/steering.js와 동기화 --------- */
+const STEER_DIMS = [
+  { key: "world", label: "세계관·설정", lo: "가볍게", hi: "깊게" },
+  { key: "dopamine", label: "사이다·보상", lo: "절제", hi: "통쾌하게" },
+  { key: "romance", label: "로맨스·관계", lo: "낮게", hi: "중심으로" },
+  { key: "action", label: "액션·긴장", lo: "잔잔", hi: "치열" },
+  { key: "mystery", label: "떡밥·미스터리", lo: "단순", hi: "촘촘히" },
+  { key: "creativity", label: "창의성", lo: "클리셰", hi: "실험적" },
+  { key: "pacing", label: "전개 속도", lo: "느리게", hi: "빠르게" },
+  { key: "style", label: "문체", lo: "간결", hi: "생생" },
+];
+const STEER_KEYS = STEER_DIMS.map((d) => d.key);
+const STEER_DEFAULT = Object.fromEntries(STEER_KEYS.map((k) => [k, 50]));
+const STEER_PRESETS = {
+  balanced: { label: "균형", weights: { world: 50, dopamine: 50, romance: 50, action: 50, mystery: 50, creativity: 50, pacing: 50, style: 50 } },
+  orthodox: { label: "정통형", weights: { world: 72, dopamine: 50, romance: 40, action: 66, mystery: 60, creativity: 45, pacing: 45, style: 58 } },
+  speed: { label: "속도형(사이다)", weights: { world: 35, dopamine: 90, romance: 35, action: 66, mystery: 45, creativity: 40, pacing: 86, style: 50 } },
+  romance: { label: "관계형", weights: { world: 45, dopamine: 56, romance: 90, action: 32, mystery: 50, creativity: 55, pacing: 46, style: 76 } },
+  lore: { label: "설정심화형", weights: { world: 90, dopamine: 42, romance: 46, action: 52, mystery: 76, creativity: 62, pacing: 32, style: 66 } },
+};
+
+function readSteering() {
+  const s = {};
+  STEER_KEYS.forEach((k) => { const n = el(`st_${k}`); s[k] = n ? Number(n.value) : 50; });
+  return s;
+}
+
+function steeringSummaryText() {
+  const s = readSteering();
+  const top = STEER_DIMS
+    .map((d) => ({ d, v: s[d.key], dev: Math.abs(s[d.key] - 50) }))
+    .filter((x) => x.dev >= 20)
+    .sort((a, b) => b.dev - a.dev).slice(0, 3)
+    .map((x) => `${x.d.label}${x.v >= 50 ? "↑" : "↓"}`);
+  // 활성 프리셋 일치 여부
+  const cur = JSON.stringify(s);
+  const preset = Object.values(STEER_PRESETS).find((p) => JSON.stringify(p.weights) === cur);
+  if (preset && preset.label !== "균형") return preset.label;
+  return top.length ? top.join(" · ") : "균형";
+}
+
+function updateSteerSummary() {
+  const sum = el("steerSummary");
+  if (sum) sum.textContent = steeringSummaryText();
+  document.querySelectorAll("#steerPresets [data-preset]").forEach((b) => {
+    const match = JSON.stringify(STEER_PRESETS[b.dataset.preset].weights) === JSON.stringify(readSteering());
+    b.classList.toggle("active", match);
+  });
+}
+
+function setSteering(weights, save = true) {
+  STEER_KEYS.forEach((k) => { const n = el(`st_${k}`); if (n) n.value = (weights && weights[k] != null) ? weights[k] : 50; });
+  updateSteerSummary();
+  if (save) { localStorage.setItem("sfAgentInput", JSON.stringify(collectInput())); }
+}
+
+function renderSteering() {
+  const ph = el("steerPresets");
+  const dh = el("steerDials");
+  if (!ph || !dh) return;
+  ph.innerHTML = Object.entries(STEER_PRESETS)
+    .map(([k, p]) => `<button class="steer-preset" type="button" data-preset="${k}">${p.label}</button>`).join("");
+  dh.innerHTML = STEER_DIMS.map((d) =>
+    `<label class="steer-dial"><span class="steer-dial-label">${d.label}</span>
+      <input type="range" min="0" max="100" step="5" value="50" data-steer="${d.key}" id="st_${d.key}" />
+      <span class="steer-ends"><i>${d.lo}</i><i>${d.hi}</i></span></label>`).join("");
+  ph.querySelectorAll("[data-preset]").forEach((b) =>
+    b.addEventListener("click", () => { setSteering(STEER_PRESETS[b.dataset.preset].weights); toast(`서사 가중치: ${STEER_PRESETS[b.dataset.preset].label}`, "info"); }));
+  dh.querySelectorAll("[data-steer]").forEach((n) => n.addEventListener("input", updateSteerSummary));
+  updateSteerSummary();
+}
+
 function applyPreset(preset) {
   if (!preset) return;
   PRESET_FIELDS.forEach((f) => {
@@ -493,6 +565,8 @@ function collectInput() {
   input.studio = state.studio;
   // 박성우(foresight) 모드: 모든 에이전트에 'AI FORESIGHT 렌즈'를 주입하도록 백엔드에 신호.
   input.foresight = state.studio === "foresight";
+  // 서사 가중치(방향 제어) — 제목·세계관·아웃라인·회차 집필에 비중으로 반영.
+  input.steering = readSteering();
   // 연재 플랫폼: 다중 선택(미선택 가능). platform은 하위호환용 첫 항목.
   input.platforms = PLATFORM_PF
     .filter((pf) => { const n = document.querySelector(`#platformChecks [data-pf="${pf}"]`); return n && n.checked; })
@@ -540,6 +614,8 @@ function fillForm(data) {
     const bg = el("blendGenres");
     if (bg) Array.from(bg.options).forEach((o) => { o.selected = set.has(o.value); });
   }
+  // 서사 가중치 복원(없으면 균형).
+  setSteering(data.steering && typeof data.steering === "object" ? data.steering : STEER_DEFAULT, false);
   state.references = Array.isArray(data._references) ? data._references : [];
   renderRefList();
 }
@@ -2301,6 +2377,7 @@ function boot() {
   if (localStorage.getItem("sfAutoFinalPass") === "0") state.autoFinalPass = false;
   renderAgentGrid();
   renderTabs();
+  renderSteering(); // 가중치 다이얼 먼저 렌더(아래 fillForm이 값을 복원)
 
   // 첫 진입은 범용 빈 폼(DEFAULTS)으로 시작한다. 장르별 예시는 '예시' 버튼,
   // AI 미래예측 SF 데모는 'AI미래학자 박성우' 모드에서 불러온다.

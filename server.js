@@ -17,6 +17,7 @@ const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar, compos
 const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
 const { buildToolPrompt, localTool, TOOLS } = require("./lib/tools");
 const { buildOutlinePrompt, parseOutline, localOutline, outlineGuideFor } = require("./lib/outline");
+const { steeringTemperature } = require("./lib/steering");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
@@ -503,6 +504,9 @@ async function handleChapter(req, res) {
   const mode = resolveMode();
   emit("meta", { from, end, mode });
 
+  // 창의성 가중치를 생성 온도로 사상(중립이면 0.85 유지).
+  const chapTemp = steeringTemperature(input.steering, 0.85);
+
   try {
     // 한 회차를 [전반부]+[후반부] 2단계로 생성해 5,000~6,000자를 안정적으로 확보한다.
     const genPart = async (prompt) => {
@@ -512,7 +516,7 @@ async function handleChapter(req, res) {
         model,
         system: prompt.system,
         messages: [{ role: "user", content: prompt.user }],
-        temperature: 0.85,
+        temperature: chapTemp,
         maxTokens: 6000, // 파트당 ~3,000자(한국어) 출력 여유
         signal: controller.signal,
         onText: (chunk) => { acc += chunk; emit("chapter-delta", { n: prompt._n, text: chunk }); },

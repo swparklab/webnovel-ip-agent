@@ -495,3 +495,18 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .ol-beat-t { font-weight: 800; font-size: 0.82rem; }
 .ol-beat-d { font-size: 0.84rem; color: var(--ink); line-height: 1.4; }
 @media (max-width: 760px) { .ol-acts { grid-template-columns: 1fr; } .ol-beat { grid-template-columns: 48px 72px 1fr; } }
+
+/* ----- 서사 가중치(Narrative Steering) 다이얼 ----- */
+.steering-section .section-note { display: flex; align-items: center; gap: 8px; }
+.steer-summary { font-weight: 800; font-size: 0.74rem; color: var(--violet); background: #f1ecfa; border-radius: 999px; padding: 2px 10px; text-transform: none; }
+.steer-presets { display: flex; flex-wrap: wrap; gap: 6px; }
+.steer-preset { padding: 6px 11px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); font-weight: 800; font-size: 0.8rem; cursor: pointer; }
+.steer-preset:hover { border-color: var(--violet); }
+.steer-preset.active { background: var(--violet); color: #fff; border-color: var(--violet); }
+.steer-dials { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px 14px; }
+.steer-dial { display: grid; gap: 2px; }
+.steer-dial-label { font-size: 0.78rem; font-weight: 800; color: var(--muted); }
+.steer-dial input[type="range"] { width: 100%; min-height: 20px; padding: 0; accent-color: var(--violet); cursor: pointer; }
+.steer-ends { display: flex; justify-content: space-between; }
+.steer-ends i { font-style: normal; font-size: 0.68rem; color: var(--line-strong); }
+@media (max-width: 480px) { .steer-dials { grid-template-columns: 1fr; } }
