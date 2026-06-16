@@ -21,17 +21,30 @@ const PLATFORM_AGENTS = [
   { id: "strategy", name: "전략 리포터", tab: "전략", sub: "성공식·KPI·주간 액션" },
 ];
 
+// IP 사업실(Business) — 수익화·확장·투자를 담당하는 IP Business Intelligence 파이프라인.
+const BUSINESS_AGENTS = [
+  { id: "revenue", name: "수익 모델러", tab: "수익 모델", sub: "과금 구조·편성·매출 시나리오" },
+  { id: "osmuRoad", name: "OSMU 로드맵", tab: "OSMU 로드맵", sub: "웹툰·드라마·게임 확장 단계" },
+  { id: "rights", name: "권리·계약 가이드", tab: "권리·계약", sub: "2차 판권·계약 체크리스트" },
+  { id: "valuation", name: "IP 가치 평가", tab: "IP 가치", sub: "5축 밸류에이션·등급" },
+  { id: "pitch", name: "IP 피치덱", tab: "피치덱", sub: "투자/제작사용 1페이지" },
+];
+
 // foresight(AI미래학자 박성우) 모드는 제작 파이프라인을 재사용하되, SF 장르 기본 +
 // 모든 에이전트에 'AI FORESIGHT 렌즈'를 주입하는 시그니처 모드다.
-const STUDIOS = { production: PRODUCTION_AGENTS, platform: PLATFORM_AGENTS, foresight: PRODUCTION_AGENTS };
+const STUDIOS = { production: PRODUCTION_AGENTS, platform: PLATFORM_AGENTS, foresight: PRODUCTION_AGENTS, business: BUSINESS_AGENTS };
 // 현재 스튜디오의 에이전트 목록. 토글 시 교체된다(아래 렌더 함수들이 모두 참조).
 let AGENTS = PRODUCTION_AGENTS;
 
-// 스튜디오별 표시 메타. production/foresight는 같은 제작 파이프라인을 쓴다.
+// 스튜디오 → 실행 파이프라인. production·foresight는 제작 파이프라인 공유.
+const STUDIO_PIPELINE = { production: "production", foresight: "production", platform: "platform", business: "business" };
+
+// 스튜디오별 표시 메타.
 const STUDIO_META = {
   production: { title: "웹소설 제작실", eyebrow: "Webnovel IP Production OS", brand: "전 장르 웹소설 IP 에이전트", run: "에이전트 실행", status: "제작실", toast: "제작실로 전환했습니다." },
   platform: { title: "플랫폼 운영실", eyebrow: "Platform Intelligence OS", brand: "플랫폼 태깅·번역·전략 운영실", run: "운영 분석 실행", status: "운영실", toast: "운영실(Platform Intelligence)로 전환했습니다." },
   foresight: { title: "AI미래학자 박성우 · AI FORESIGHT", eyebrow: "AI Foresight SF Studio", brand: "AI미래학자 박성우의 미래예측 SF 스튜디오", run: "AI FORESIGHT 실행", status: "박성우 모드", toast: "AI미래학자 박성우 모드로 전환했습니다. 장르를 SF로 맞췄습니다." },
+  business: { title: "IP 사업실", eyebrow: "IP Business / Monetization OS", brand: "수익화·OSMU·투자 IP 사업실", run: "사업 분석 실행", status: "사업실", toast: "IP 사업실로 전환했습니다. 현재 작품 IP로 수익·확장·투자 전략을 만듭니다." },
 };
 
 // 장르 패밀리에 따라 SF 전용 필드 라벨을 전환한다.
@@ -286,11 +299,13 @@ function setStudio(studio, opts = {}) {
 
   document.querySelectorAll(".studio-btn").forEach((b) =>
     b.classList.toggle("active", b.dataset.studio === studio));
-  // 제작 입력(prod-only)은 production·foresight에서 보이고, 운영(ops-only)은 platform에서만.
+  // 제작 입력(prod-only)은 production·foresight·business에서 보이고, 운영(ops-only)은 platform에서만.
   document.querySelectorAll(".prod-only").forEach((n) => { n.hidden = ops; });
   document.querySelectorAll(".ops-only").forEach((n) => { n.hidden = !ops; });
   document.querySelectorAll(".foresight-only").forEach((n) => { n.hidden = !fore; });
+  document.querySelectorAll(".business-only").forEach((n) => { n.hidden = studio !== "business"; });
   document.body.classList.toggle("studio-foresight", fore);
+  document.body.classList.toggle("studio-business", studio === "business");
   applyStudioLabels(ops);
 
   const runLabel = el("runAgent")?.querySelector("span:last-child");
@@ -684,7 +699,7 @@ async function runAgent() {
   const controller = new AbortController();
   state.controller = controller;
   const model = el("modelSelect").value || state.config.defaultModel;
-  const pipeline = state.studio === "platform" ? "platform" : "production";
+  const pipeline = STUDIO_PIPELINE[state.studio] || "production";
 
   try {
     const res = await fetch("/api/run", {

@@ -18,6 +18,7 @@ const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
+const { buildBizLocalReport } = require("./lib/business-local");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
 const {
   PLATFORMS, TAXONOMY, PERSONAS, KR_SF_OVERLAY, REACTION_AXES,
@@ -41,12 +42,21 @@ const MIME = {
 // Order used when assembling a project into a single Markdown export.
 const AGENT_ORDER = ["foresight", "world", "plot", "draft", "reader", "osmu"];
 const OPS_AGENT_ORDER = ["tagger", "reaction", "fit", "packaging", "strategy"];
+const BIZ_AGENT_ORDER = ["revenue", "osmuRoad", "rights", "valuation", "pitch"];
+
+// 파이프라인별 메타: 실행 순서 · 로컬 폴백 빌더 · 제작도 점수 부여 여부.
+const PIPELINES = {
+  production: { order: AGENT_ORDER, local: buildLocalReport, scored: true },
+  platform: { order: OPS_AGENT_ORDER, local: buildOpsLocalReport, scored: false },
+  business: { order: BIZ_AGENT_ORDER, local: buildBizLocalReport, scored: false },
+};
 
 // Resolve the export/iteration order for whichever pipeline produced a report.
 function orderFor(record) {
   const agents = record?.report?.agents || record?.agents || {};
-  const isOps = OPS_AGENT_ORDER.some((id) => id in agents);
-  return isOps ? OPS_AGENT_ORDER : AGENT_ORDER;
+  if (OPS_AGENT_ORDER.some((id) => id in agents)) return OPS_AGENT_ORDER;
+  if (BIZ_AGENT_ORDER.some((id) => id in agents)) return BIZ_AGENT_ORDER;
+  return AGENT_ORDER;
 }
 
 function sendJson(res, status, payload) {
@@ -125,11 +135,11 @@ async function handleRun(req, res) {
   const payload = await readJson(req);
   const input = payload.input || {};
   const model = payload.model || config.defaultModel;
-  const pipeline = payload.pipeline === "platform" ? "platform" : "production";
-  const isOps = pipeline === "platform";
-  const order = isOps ? OPS_AGENT_ORDER : AGENT_ORDER;
-  // 제작도 점수는 제작실 입력에만 의미가 있다. 운영실은 0으로 둔다.
-  const score = isOps ? 0 : scoreInput(input);
+  const pipeline = PIPELINES[payload.pipeline] ? payload.pipeline : "production";
+  const meta = PIPELINES[pipeline];
+  const order = meta.order;
+  // 제작도 점수는 제작실 입력에만 의미가 있다. 운영실·사업실은 0으로 둔다.
+  const score = meta.scored ? scoreInput(input) : 0;
 
   // Open the SSE stream.
   res.writeHead(200, {
@@ -153,7 +163,7 @@ async function handleRun(req, res) {
   try {
     if (mode === "local") {
       // No engine available: stream the deterministic fallback so the product still demos.
-      const report = isOps ? buildOpsLocalReport(input) : buildLocalReport(input);
+      const report = meta.local(input);
       emit("start", {
         model: report.model,
         fallback: true,

@@ -419,3 +419,9 @@ body.modal-open { overflow: hidden; }
 .foresight-intro .section-note { color: #2f6db0; }
 body.studio-foresight .studio-btn.active { color: #2f6db0; border-color: #2f6db0; }
 body.studio-foresight #brandEyebrow { color: #2f6db0; }
+
+/* ----- IP 사업실(business) 스튜디오 ----- */
+.business-intro { border-left: 4px solid #a55f00; background: #fff8ee; }
+.business-intro .section-note { color: #a55f00; }
+body.studio-business .studio-btn.active { color: #a55f00; border-color: #a55f00; }
+body.studio-business #brandEyebrow { color: #a55f00; }
