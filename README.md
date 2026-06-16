@@ -63,6 +63,31 @@ flowchart TB
     DAG --> LLM
     KB -. "모든 에이전트 프롬프트에 자동 주입" .-> OR
     KB -.-> AIM
+
+    classDef user fill:#fff4df,stroke:#a55f00,stroke-width:2px,color:#3a2a00
+    classDef fe fill:#e7f0fb,stroke:#2f6db0,color:#13314f
+    classDef sv fill:#e3f4ee,stroke:#0c7b63,color:#063d31
+    classDef core fill:#efe9fb,stroke:#6b4ea5,color:#2e1f4d
+    classDef ai fill:#fdeede,stroke:#a55f00,color:#5a3300
+    classDef kb fill:#e3f4ee,stroke:#0c7b63,color:#063d31
+    classDef st fill:#f1f3f2,stroke:#8a958f,color:#33403c
+    classDef api fill:#d6efe5,stroke:#0c7b63,color:#063d31
+    classDef cli fill:#dceafa,stroke:#2f6db0,color:#13314f
+    classDef local fill:#eceeed,stroke:#8a958f,color:#33403c
+    class U user
+    class FE1,FE2 fe
+    class SV1,SV2,SV3 sv
+    class OR,DAG core
+    class AIM ai
+    class L1 api
+    class L2 cli
+    class L3 local
+    class KB kb
+    class ST st
+    style FE fill:#f3f8fe,stroke:#2f6db0
+    style SV fill:#eef9f4,stroke:#0c7b63
+    style CORE fill:#f6f3fc,stroke:#6b4ea5
+    style LLM fill:#eef4f1,stroke:#0c7b63
 ```
 
 **도면부호 (Reference Numerals)**
@@ -98,6 +123,22 @@ flowchart TB
     I --> N["⬇ 통합 IP 패키지<br/>POST /api/export"]
     G2 --> N
     H --> N
+
+    classDef idea fill:#fff4df,stroke:#a55f00,stroke-width:2px,color:#3a2a00
+    classDef diag fill:#fdeede,stroke:#a55f00,color:#5a3300
+    classDef plan fill:#e7f0fb,stroke:#2f6db0,color:#13314f
+    classDef prod fill:#e3f4ee,stroke:#0c7b63,color:#063d31
+    classDef chap fill:#dceafa,stroke:#2f6db0,color:#13314f
+    classDef ops fill:#efe9fb,stroke:#6b4ea5,color:#2e1f4d
+    classDef out fill:#d6efe5,stroke:#0c7b63,stroke-width:2px,color:#063d31
+    class A idea
+    class B,C diag
+    class D,E plan
+    class F,G,H prod
+    class I,J,K chap
+    class L,G2 ops
+    class M diag
+    class N out
 ```
 
 ### FIG. 3 — 제작실 파이프라인 DAG ([410] Narrative Intelligence)
@@ -120,6 +161,15 @@ flowchart LR
     F -. context .-> R
     W -. context .-> D
     W -. context .-> R
+
+    classDef setup fill:#e3f4ee,stroke:#0c7b63,color:#063d31
+    classDef build fill:#d6efe5,stroke:#0c7b63,color:#063d31
+    classDef draft fill:#fdeede,stroke:#a55f00,stroke-width:2px,color:#5a3300
+    classDef review fill:#e7f0fb,stroke:#2f6db0,color:#13314f
+    class F,W setup
+    class P,O build
+    class D draft
+    class R review
 ```
 
 ### FIG. 4 — 운영실 파이프라인 DAG ([420] Platform Intelligence)
@@ -138,6 +188,11 @@ flowchart LR
     T -. context .-> St
     Fi -. context .-> St
     Rx -. 운영 인사이트 .-> St
+
+    classDef ops fill:#efe9fb,stroke:#6b4ea5,color:#2e1f4d
+    classDef opsHi fill:#e2d9f5,stroke:#6b4ea5,stroke-width:2px,color:#2e1f4d
+    class T,Rx,Fi,Pk ops
+    class St opsHi
 ```
 
 ### FIG. 5 — 연재 메모리 루프 (Rolling Canon · 장거리 연속성)
@@ -151,6 +206,13 @@ flowchart LR
     M --> CS["composeStorySoFar()<br/>'지금까지의 이야기' 블록 합성(미회수 떡밥 집계)"]
     CS -->|"N+1화 프롬프트 주입"| C1
     M --> UI["🧭 스토리 바이블 패널<br/>미회수 떡밥·인물 현황·확정 설정"]
+
+    classDef gen fill:#e3f4ee,stroke:#0c7b63,color:#063d31
+    classDef mem fill:#dceafa,stroke:#2f6db0,color:#13314f
+    classDef panel fill:#fdeede,stroke:#a55f00,stroke-width:2px,color:#5a3300
+    class C1 gen
+    class S,M,CS mem
+    class UI panel
 ```
 
 ### FIG. 6 — 자가비평·보완 하네스 (Self-Critique & Autopilot)
@@ -168,6 +230,16 @@ flowchart TB
         L4 -->|"아니오"| L1
         L4 -->|"예"| L5["전체 최종 보완"]
     end
+
+    classDef gen fill:#e3f4ee,stroke:#0c7b63,color:#063d31
+    classDef judge fill:#fdeede,stroke:#a55f00,color:#5a3300
+    classDef fix fill:#dceafa,stroke:#2f6db0,color:#13314f
+    classDef done fill:#d6efe5,stroke:#0c7b63,stroke-width:2px,color:#063d31
+    class GEN,L1 gen
+    class CR,CR2,L2,L4 judge
+    class RV,L3 fix
+    class OUT,L5 done
+    style AUTO fill:#f6f3fc,stroke:#6b4ea5
 ```
 
 ### FIG. 7 — 엔진 결정 로직 (Provider Resolution · api / cli / local)
@@ -185,6 +257,15 @@ flowchart TB
     A1 -->|"아니오"| A2{"Claude CLI 로그인?"}
     A2 -->|"예"| CLI
     A2 -->|"아니오"| LOC
+
+    classDef q fill:#efe9fb,stroke:#6b4ea5,color:#2e1f4d
+    classDef api fill:#d6efe5,stroke:#0c7b63,stroke-width:2px,color:#063d31
+    classDef cli fill:#dceafa,stroke:#2f6db0,stroke-width:2px,color:#13314f
+    classDef local fill:#eceeed,stroke:#8a958f,stroke-width:2px,color:#33403c
+    class Start,Q,K,A1,A2 q
+    class API api
+    class CLI cli
+    class LOC local
 ```
 
 > **모든 경로는 동일한 `streamMessage()` 인터페이스로 수렴**하므로, 엔진이 바뀌어도 오케스트레이터·AI 모듈은 코드를 바꾸지 않는다. 키가 없어도 `local`이 전 장르·운영실 데모를 끊김 없이 보장한다.
