@@ -585,7 +585,7 @@ async function handleChapter(req, res) {
       ctx.outlineGuide = outline ? outlineGuideFor(outline, n) : "";
       emit("chapter-start", { n, isFinale });
       if (mode === "local") {
-        const text = localChapter(input, n, prevText, isFinale);
+        const text = localChapter(input, n, prevText, isFinale, revise);
         emit("chapter-delta", { n, text });
         emit("chapter-done", { n, chars: text.length, isFinale });
         prevText = text;

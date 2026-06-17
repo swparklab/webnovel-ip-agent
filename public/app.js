@@ -1741,12 +1741,20 @@ async function critiqueAll() {
 
 // 피드백을 '하네스 수정 지침'으로 변환 (위반·약점·수정지시를 공식 기준으로 묶음).
 function fixesToNote(c) {
-  const parts = [];
+  const parts = [`2차 보완 목표: 자체 비평 90점 이상(현재 ${typeof c?.overall === "number" ? c.overall : "?"}점). 1차보다 반드시 상승시킨다.`];
+  // 6축 중 가장 낮은 2개를 지목해 집중 보강하게 한다.
+  if (c?.scores && typeof c.scores === "object") {
+    const low = Object.entries(c.scores)
+      .filter(([, v]) => typeof v === "number")
+      .sort((a, b) => a[1] - b[1])
+      .slice(0, 2)
+      .map(([k, v]) => `${k}(${v}/10)`);
+    if (low.length) parts.push(`낮았던 축(집중 보강): ${low.join(", ")} — 이 축을 끌어올릴 장면을 추가·교체하라.`);
+  }
   if (c?.violations?.length) parts.push(`반드시 제거할 공식/실패패턴 위반: ${c.violations.join(" / ")}`);
   if (c?.weaknesses?.length) parts.push(`고칠 약점: ${c.weaknesses.join(" / ")}`);
   if (c?.fixes?.length) parts.push(`적용할 수정 지시:\n- ${c.fixes.join("\n- ")}`);
-  if (typeof c?.formulaFit === "number") parts.push(`현재 공식충실 ${c.formulaFit}/100 — 결핍→특권→검증→즉시보상(수치/지위/관계)→세계확장 한 사이클을 확실히 이행해 이 점수를 끌어올려라.`);
-  if (!parts.length) return "흥행 공식(결핍→특권→검증→즉시보상→세계확장)과 코어를 이 회차가 한 바퀴 이행하도록, 보상을 수치/지위/관계로 보이게 강화하라.";
+  if (typeof c?.formulaFit === "number") parts.push(`현재 공식충실 ${c.formulaFit}/100 — 결핍→특권→검증→즉시보상(수치/지위/관계)→세계확장 한 사이클을 확실히 이행하고, 보상을 1차보다 더 구체적인 수치로 박아 이 점수를 끌어올려라.`);
   return parts.join("\n");
 }
 
