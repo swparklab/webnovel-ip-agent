@@ -189,6 +189,7 @@ const state = {
   controller: null,
   lastModel: "",
   playbookCache: {},
+  recommendedSteering: null,
 };
 
 async function ensurePlaybook(genre) {
@@ -288,14 +289,22 @@ function renderSteering() {
   const ph = el("steerPresets");
   const dh = el("steerDials");
   if (!ph || !dh) return;
-  ph.innerHTML = Object.entries(STEER_PRESETS)
-    .map(([k, p]) => `<button class="steer-preset" type="button" data-preset="${k}">${p.label}</button>`).join("");
+  ph.innerHTML = `<button class="steer-preset steer-rec" type="button" data-genre-rec="1" title="현재 장르에 권장되는 보상체계로 그래프바를 맞춥니다">🎯 장르 추천</button>` +
+    Object.entries(STEER_PRESETS)
+      .map(([k, p]) => `<button class="steer-preset" type="button" data-preset="${k}">${p.label}</button>`).join("");
   dh.innerHTML = STEER_DIMS.map((d) =>
     `<label class="steer-dial"><span class="steer-dial-label">${d.label}</span>
       <input type="range" min="0" max="100" step="5" value="50" data-steer="${d.key}" id="st_${d.key}" />
       <span class="steer-ends"><i>${d.lo}</i><i>${d.hi}</i></span></label>`).join("");
   ph.querySelectorAll("[data-preset]").forEach((b) =>
     b.addEventListener("click", () => { setSteering(STEER_PRESETS[b.dataset.preset].weights); toast(`서사 가중치: ${STEER_PRESETS[b.dataset.preset].label}`, "info"); }));
+  const recBtn = ph.querySelector("[data-genre-rec]");
+  if (recBtn) recBtn.addEventListener("click", () => {
+    const w = state.recommendedSteering;
+    if (!w) { toast("장르를 먼저 선택하세요.", "warn"); return; }
+    setSteering(w);
+    toast(`${GENRE_LABELS_KO[el("genre").value] || "장르"} 권장 보상체계를 적용했습니다.`, "info");
+  });
   dh.querySelectorAll("[data-steer]").forEach((n) => n.addEventListener("input", updateSteerSummary));
   updateSteerSummary();
 }
@@ -338,11 +347,19 @@ async function onGenreChange(fillPreset) {
   const family = data?.playbook?.family || "general";
   applyGenreLabels(family);
   populateSubgenres(data);
+  // 장르별 권장 보상체계를 그래프바에 반영한다. 작가가 장르를 직접 고르거나(예시),
+  // 아직 손대지 않은 중립 상태면 권장값으로 채운다(이미 조정한 값은 보존).
+  if (data?.recommendedSteering) {
+    state.recommendedSteering = data.recommendedSteering;
+    const cur = readSteering();
+    const isNeutral = STEER_KEYS.every((k) => Number(cur[k]) === 50);
+    if (fillPreset || isNeutral) setSteering(data.recommendedSteering, false);
+  }
   if (fillPreset) {
     applyPreset(data?.playbook?.preset);
     localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
     el("runStatus").textContent = "예시 적용됨";
-    toast(`${GENRE_LABELS_KO[genre] || genre} 장르 예시를 불러왔습니다.`, "info");
+    toast(`${GENRE_LABELS_KO[genre] || genre} 장르 예시 + 권장 보상체계를 불러왔습니다.`, "info");
   }
   if (state.activeTab === "prompts") renderActiveTab();
   if (typeof updateJourney === "function") updateJourney();

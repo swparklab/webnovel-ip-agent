@@ -17,7 +17,7 @@ const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar, compos
 const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
 const { buildToolPrompt, localTool, TOOLS } = require("./lib/tools");
 const { buildOutlinePrompt, parseOutline, localOutline, outlineGuideFor } = require("./lib/outline");
-const { steeringTemperature } = require("./lib/steering");
+const { steeringTemperature, recommendedSteering } = require("./lib/steering");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
@@ -645,11 +645,13 @@ async function handleApi(req, res, pathname) {
     const query = new URL(req.url, "http://localhost").searchParams;
     const genre = query.get("genre") || "aiForesight";
     const subgenre = query.get("subgenre") || "";
+    const pb = getPlaybook(genre, subgenre);
     return sendJson(res, 200, {
       ok: true,
       genre,
       subgenre,
-      playbook: getPlaybook(genre, subgenre),
+      playbook: pb,
+      recommendedSteering: recommendedSteering(genre, pb.family),
       common: {
         hitStages: COMMON.successFlow,
         designPrinciple: COMMON.designPrinciple,
