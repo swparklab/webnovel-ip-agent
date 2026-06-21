@@ -33,6 +33,16 @@ const {
   buildGuaranteePrompt, parseGuarantee, localGuarantee, guaranteeReviseNote, buildUpgradeBrief,
 } = require("../lib/media-guarantee");
 const { buildMediaInputBlock } = require("../lib/media-studios");
+const { designElements, recommendedDesignSpec, buildDesignSpecBlock } = require("../lib/design-spec");
+const {
+  ONESHEET_KEYS, buildOneSheetLockBlock, localOneSheet, parseOneSheet,
+  INTEGRITY_DIMS, INTEGRITY_GATES, gateOf, localIntegrity, buildContePrompt, buildIntegrityPrompt,
+} = require("../lib/onesheet");
+const { buildInputBlock } = require("../lib/agents");
+const {
+  buildAiFilmDoctrineBlock, FESTIVALS, parseTechMap, localTechMap,
+  parseFestival, localFestival, buildVideoPromptPrompt, buildFormConvertPrompt, buildFestivalPrompt,
+} = require("../lib/aifilm");
 
 // 전용 파이프라인을 갖는 신규 매체(웹소설은 기존 production 파이프라인 사용).
 const STUDIO_MEDIUMS = MEDIA_PIPELINE_IDS; // film, animation, documentary, drama, advertising
@@ -224,4 +234,145 @@ test("⑯ 보증서: 미달 조건 → 보완 지시, 폴백/파서 정상, 업�
   assert.equal(parsed.criteria.ironicLogline.met, true);
   const up = buildUpgradeBrief({ logline: "약함" }, "advertising", "short");
   assert.ok(up.system.includes("흥행 닥터") && up.system.includes("승리 조건"), "업그레이드 프롬프트 누락");
+});
+
+/* ───────────────── 상세 설계 블루프린트 (design-spec) ───────────────── */
+
+test("⑰ 매체별 상세 설계 요소가 옵션·포맷별 추천을 갖춘다", () => {
+  for (const m of [...STUDIO_MEDIUMS, "webnovel"]) {
+    const els = designElements(m);
+    assert.ok(els.length >= 6, `${m}: 설계 요소 6개 미만`);
+    for (const e of els) {
+      assert.ok(e.key && e.label, `${m}: key/label 누락`);
+      assert.ok(Array.isArray(e.options) && e.options.length >= 2, `${m}.${e.key}: 선택지 부족`);
+      assert.ok(e.recommend && e.recommend.short && e.recommend.medium && e.recommend.long, `${m}.${e.key}: 포맷별 추천 누락`);
+    }
+  }
+  // 핵심 노브(러닝타임·핵심 오브젝트류)가 영화에 존재한다.
+  assert.ok(designElements("film").some((e) => /러닝타임/.test(e.label)), "영화에 러닝타임 요소 없음");
+});
+
+test("⑱ recommendedDesignSpec은 포맷에 따라 다른 값을, buildDesignSpecBlock은 확정값을 주입한다", () => {
+  for (const m of STUDIO_MEDIUMS) {
+    const s = recommendedDesignSpec(m, "short");
+    const l = recommendedDesignSpec(m, "long");
+    const keys = designElements(m).map((e) => e.key);
+    for (const k of keys) assert.ok(k in s, `${m}.${k}: 추천 누락`);
+    // 단편·장편 추천이 최소 한 요소에서 달라야 한다.
+    assert.ok(keys.some((k) => s[k] !== l[k]), `${m}: 포맷별 추천이 전부 동일`);
+    // 주입 블록은 확정값을 싣는다.
+    const block = buildDesignSpecBlock({ medium: m, designSpec: s });
+    assert.ok(block.includes("상세 설계 요소") && block.includes(designElements(m)[0].label), `${m}: 설계 블록 주입 누락`);
+  }
+  // designSpec이 없으면 빈 블록.
+  assert.equal(buildDesignSpecBlock({ medium: "film" }), "", "designSpec 없을 때 빈 블록이어야");
+});
+
+/* ───────────────── 감독 원시트 (Director One-Sheet) ───────────────── */
+
+test("⑲ 원시트는 12블록이고, 폴백/파서가 정상이며, LOCK 블록이 금지·감수성을 싣는다", () => {
+  assert.equal(ONESHEET_KEYS.length, 12, "원시트 12블록 아님");
+  const sheet = localOneSheet({ input: { ipTitle: "릴리", protagonist: "기록관", coreObject: "젖은 인형" }, medium: "film", genre: "thriller", format: "short" });
+  const filled = ONESHEET_KEYS.filter((k) => String(sheet[k] || "").trim()).length;
+  assert.ok(filled >= 10, `폴백 원시트 채움 부족(${filled})`);
+  const lock = buildOneSheetLockBlock(sheet, "film");
+  assert.ok(lock.includes("감독 원시트 LOCK") && lock.includes("금지 규칙") && lock.includes("감수성 원칙"), "LOCK 블록 누락");
+  assert.equal(buildOneSheetLockBlock(null, "film"), "", "원시트 없으면 빈 LOCK");
+  // 파서
+  const parsed = parseOneSheet('{"corePremise":"a","moralQuestion":"b","emotionalWound":"c","centralObject":"d","characterEngine":"e","worldTexture":"f","visualGrammar":"g","soundGrammar":"h","beatStructure":"i","continuityBible":"j","forbiddenDrift":"k","evaluationRubric":"l"}');
+  assert.ok(parsed && parsed.centralObject === "d", "파서 실패");
+});
+
+test("⑳ LOCK은 전 장르(agents) + 전 매체(media-studios) 입력 블록에 주입된다", () => {
+  const sheet = localOneSheet({ input: { ipTitle: "T", coreObject: "인형" }, medium: "film", genre: "thriller", format: "short" });
+  // 전 장르(웹소설 제작 파이프라인)
+  const wb = buildInputBlock({ genre: "romanceFantasy", oneSheet: sheet, ipTitle: "T" });
+  assert.ok(wb.includes("감독 원시트 LOCK"), "agents(전 장르)에 LOCK 미주입");
+  // 전 매체
+  for (const m of STUDIO_MEDIUMS) {
+    const mb = buildMediaInputBlock({ medium: m, format: "short", oneSheet: sheet, ipTitle: "T" });
+    assert.ok(mb.includes("감독 원시트 LOCK"), `${m}에 LOCK 미주입`);
+  }
+  // oneSheet 없으면 미주입.
+  assert.ok(!buildInputBlock({ genre: "thriller", ipTitle: "T" }).includes("감독 원시트 LOCK"), "원시트 없는데 LOCK 주입됨");
+});
+
+test("㉑ 서사 무결성: 6축 합 100 · 게이트 로직 · 폴백 채점", () => {
+  assert.equal(INTEGRITY_DIMS.reduce((a, [, w]) => a + w, 0), 100, "무결성 배점 합이 100이 아님");
+  assert.equal(gateOf(90, "plan"), "통과");
+  assert.equal(gateOf(82, "plan"), "재생성"); // 기획 게이트 85
+  assert.equal(gateOf(82, "conte"), "통과");  // 콘티 게이트 80
+  assert.equal(gateOf(65, "conte"), "구조 재작성");
+  const ig = localIntegrity({}, "film", null, "젖은 인형이 다시 나타났다. 그래서 그는 자백했다. 빗방울이 구두에 떨어졌다. 마지막.");
+  assert.ok(ig.overall >= 0 && ig.overall <= 100 && ig.gate && ig.fixes.length, "무결성 폴백 비정상");
+  // 콘티 프롬프트는 6층 + 네거티브를 지시한다.
+  const conte = buildContePrompt({ input: { ipTitle: "T" }, medium: "film", oneSheet: ig ? null : null, format: "short" });
+  assert.ok(conte.system.includes("6층") && conte.system.includes("NEGATIVE"), "콘티 6층/네거티브 지시 누락");
+  // 무결성 프롬프트에 원시트 LOCK이 채점 기준으로 들어간다.
+  const sheet = localOneSheet({ input: { ipTitle: "T", coreObject: "인형" }, medium: "film", genre: "thriller", format: "short" });
+  assert.ok(buildIntegrityPrompt({ input: {}, medium: "film", oneSheet: sheet, digest: "x" }).system.includes("감독 원시트 LOCK"), "무결성 기준에 LOCK 누락");
+});
+
+/* ───────────────── AI 영상 제작 융합 (aifilm) ───────────────── */
+
+test("㉒ AI 영상 모드: 켜짐/꺼짐 주입 · 매체별 독트린 · 전 매체 적용", () => {
+  // 토글 OFF면 미주입.
+  assert.equal(buildAiFilmDoctrineBlock({ medium: "film" }), "", "토글 OFF인데 주입됨");
+  // 시각 매체는 풀 독트린(영어 영상 프롬프트 포함).
+  for (const m of STUDIO_MEDIUMS) {
+    const b = buildAiFilmDoctrineBlock({ medium: m, aiFilmMode: true });
+    assert.ok(b.includes("AI 영상 제작 융합") && b.includes("AI 비디오 생성 프롬프트"), `${m}: 풀 독트린 누락`);
+  }
+  // 텍스트 매체(웹소설)는 영상화 대비 라이트 노트.
+  const wb = buildAiFilmDoctrineBlock({ medium: "webnovel", aiFilmMode: true });
+  assert.ok(wb.includes("AI 영상화 대비") && !wb.includes("AI 비디오 생성 프롬프트"), "웹소설 라이트 노트 아님");
+});
+
+test("㉓ Tech-Map / Festival / 영상프롬프트 / 폼변환 빌더·폴백 정상", () => {
+  // 폴백
+  const tm = localTechMap({ input: { logline: "x" }, medium: "film" });
+  assert.ok(tm.hardElements.length && tm.aiStrengths.length && tm.rewriteSuggestion, "techmap 폴백 비정상");
+  // 파서
+  const tmp = parseTechMap('{"hardElements":[{"element":"립싱크","why":"a","workaround":"독백"}],"aiStrengths":[{"strength":"모핑","narrativeUse":"기억"}],"rewriteSuggestion":"r"}');
+  assert.equal(tmp.hardElements[0].workaround, "독백");
+  // 영화제
+  assert.ok(Object.keys(FESTIVALS).length >= 4, "영화제 데이터 부족");
+  const fl = localFestival({ input: {}, festival: "runwayAIFF" });
+  assert.ok(fl.artistryIndex >= 0 && fl.originalityIndex >= 0 && fl.fixes.length, "festival 폴백 비정상");
+  const fp = parseFestival('{"artistryIndex":80,"originalityIndex":70,"juryReview":"r","fixes":["a"],"festivalFit":[{"festival":"X","fit":80,"why":"y"}]}');
+  assert.equal(fp.artistryIndex, 80);
+  assert.ok(buildFestivalPrompt({ input: {}, medium: "film", digest: "d", festival: "siaiff" }).system.includes("심사위원"), "영화제 프롬프트 누락");
+  // 영상 프롬프트: 영어 + --ar + 카메라 지시.
+  const vp = buildVideoPromptPrompt({ input: { ipTitle: "T" }, medium: "film", digest: "씬", format: "short" });
+  assert.ok(vp.system.includes("--ar 16:9") && vp.system.includes("camera movement"), "영상 프롬프트 규칙 누락");
+  // 폼 변환: 소설→시나리오 / 시나리오→소설.
+  assert.ok(buildFormConvertPrompt({ text: "산문", from: "novel", to: "script" }).system.includes("시나리오"), "novel→script 누락");
+  assert.ok(buildFormConvertPrompt({ text: "S1.", from: "script", to: "novel" }).system.includes("소설"), "script→novel 누락");
+});
+
+/* ───────────────── AI 애니메이션 영화제 수상 (aianimation) ───────────────── */
+
+test("㉔ AI 애니 콘티는 컷마다 '콘티 + 생성 프롬프트'를 페어로 강제하고 모델 최적화한다", () => {
+  const an = require("../lib/aianimation");
+  assert.ok(an.MODEL_KEYS.length >= 5, "AI 영상 모델 5종 미만");
+  for (const mk of an.MODEL_KEYS) {
+    const c = an.buildVisualContePrompt({ input: { ipTitle: "T" }, medium: "animation", oneSheet: { centralObject: "인형" }, format: "short", targetModel: mk });
+    assert.ok(c.system.includes("콘티만 주는 것은 금지"), `${mk}: 콘티-only 금지 누락`);
+    assert.ok(c.system.includes("생성 프롬프트") && c.system.includes("Negative") && c.system.includes("Elements"), `${mk}: 컷 페어 필드 누락`);
+    assert.ok(c.system.includes(an.AI_VIDEO_MODELS[mk].label), `${mk}: 모델 최적화 누락`);
+    assert.ok(c.system.includes("--ar 16:9"), `${mk}: 화면비 누락`);
+  }
+  // 로컬 폴백도 컷 페어.
+  const lc = an.localVisualConte({ input: {}, medium: "animation", oneSheet: { centralObject: "인형" }, format: "short", targetModel: "sora" });
+  assert.ok(lc.includes("생성 프롬프트 (Sora)") && lc.includes("Negative") && lc.includes("Elements"), "로컬 컷 페어 누락");
+});
+
+test("㉕ 애니 영화제 수상 하네스: 애니는 항상 주입, 영화는 AI영상모드일 때만", () => {
+  const an = require("../lib/aianimation");
+  // 애니메이션은 모드 없이도 하네스.
+  assert.ok(an.buildAiAnimFestivalBlock({ medium: "animation" }).includes("마술적 리얼리즘"), "애니 하네스 미주입");
+  assert.ok(buildMediaInputBlock({ medium: "animation", format: "short", ipTitle: "T" }).includes("영화제 수상 하네스"), "애니 파이프라인 하네스 미주입");
+  // 영화는 aiFilmMode 꺼지면 미주입, 켜지면 주입.
+  assert.equal(an.buildAiAnimFestivalBlock({ medium: "film" }), "", "영화 하네스가 모드 없이 주입됨");
+  assert.ok(an.buildAiAnimFestivalBlock({ medium: "film", aiFilmMode: true }).includes("마술적 리얼리즘"), "영화 AI모드 하네스 미주입");
 });

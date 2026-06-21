@@ -44,6 +44,7 @@
             <span>에이전트 실행</span>
           </button>
           <button class="command ghost" id="stopAgent" type="button" hidden title="실행 중단">중단</button>
+          <button class="icon-command" id="onesheetBtn" type="button" title="감독 원시트 — 주제·상징·결말·문법·금지규칙을 LOCK해 모든 장르·매체 산출을 통제 + 서사 무결성 채점 + 콘티/프롬프트">🎬︎</button>
           <button class="icon-command media-only" id="mediaToolsBtn" type="button" hidden title="매체 작업대 — 🚀 원클릭 1등작 만들기·흥행 보증서·산출물 평가·완성도 심사·다른 매체로 변환·제작 도구팩">🎬</button>
           <button class="icon-command" id="toolboxBtn" type="button" title="AI 글쓰기 도구 (브레인스토밍·묘사·다시쓰기·확장·압축·이름)">✍️</button>
           <button class="icon-command" id="loadExample" type="button" title="예시 입력">예시</button>
@@ -117,6 +118,15 @@
             <label class="field prod-only medium-row" id="directorRow" hidden><span>연출 스타일 (감독 톤)</span>
               <select id="directorStyle" name="directorStyle">
                 <option value="">자동 (지정 안 함)</option>
+              </select></label>
+            <label class="switch prod-only medium-row" id="aiFilmRow" style="margin-top:4px"><input type="checkbox" id="aiFilmMode" /><span>🎥 AI 영상 제작 모드 — AI 비디오 생성(Runway·Sora·Kling) 전제로 제약 적응 + 씬별 영어 프롬프트 자동 출력</span></label>
+            <label class="field prod-only medium-row" id="videoModelRow" hidden><span>AI 영상 생성 모델 (콘티 프롬프트 최적화)</span>
+              <select id="videoModel" name="videoModel">
+                <option value="kling">Kling 1.6 — 롱테이크·물리·립싱크</option>
+                <option value="runway">Runway Gen-4.5 — 카메라 제어·모션브러시</option>
+                <option value="sora">Sora — 포토리얼·60초 일관성</option>
+                <option value="seedance">Seedance 2.0 — 오디오 동기·멀티인풋</option>
+                <option value="happyhorse">HappyHorse-1.0 — 다국어 립싱크</option>
               </select></label>
             <p class="section-hint medium-row">매체마다 <strong>그 분야 1등작의 승리 공식</strong>과 <strong>연출(감동 요소·연출 값)</strong>이 강제 적용됩니다. 웹소설 외 매체는 전용 파이프라인으로 기획→대본/콘티→연출 설계까지 생성하고, <strong>🎬 매체 작업대</strong>의 <strong>🚀 원클릭 1등작 만들기</strong>로 흥행 보증까지 한 번에.</p>
             <label class="field"><span>주 장르</span>
@@ -195,6 +205,12 @@
               <input id="targetReader" name="targetReader" autocomplete="off" placeholder="예: AI 미래, 계급 역전, 빠른 전개를 좋아하는 독자" /></label>
             <label class="field"><span>한 줄 콘셉트</span>
               <textarea id="logline" name="logline" rows="3" placeholder="주인공, AI 미래 기술, 사회적 압력, 독자 보상을 한 문장으로"></textarea></label>
+          </div>
+
+          <div class="form-section prod-only medium-row" id="designSpecSection" hidden>
+            <p class="section-note">🎛 상세 설계 요소 <button class="mini" id="designRecommendBtn" type="button" title="이 매체·포맷의 추천값을 다시 적용">추천값 적용</button></p>
+            <p class="section-hint">러닝타임·인물 수·핵심 오브젝트·장르 톤·메시지·기술 포인트 등을 <strong>노브 단위로 직접</strong> 고르세요. 매체·포맷을 바꾸면 추천 방향이 자동으로 채워지고, 바꾼 값은 모든 산출물에 구속 조건으로 주입됩니다.</p>
+            <div id="designSpecBody" class="design-spec-body"></div>
           </div>
 
           <div class="form-section ops-only" hidden>
@@ -439,8 +455,38 @@
           </select>
           <button class="command" data-media-act="convert" type="button">🎬 변환 실행</button>
         </div>
+        <div class="tool-tabs" id="mediaAiFilm" style="margin-top:8px" aria-label="AI 영상 제작">
+          <span class="section-hint" style="margin:0 6px 0 0">🎥 AI 영상:</span>
+          <button class="command" data-media-act="techmap" type="button" title="AI 약점을 서사 장치(독백·초현실)로, AI 강점(모핑·글리치·스케일)을 메타포로 매핑">🛠 기술→서사 매핑</button>
+          <button class="command" data-media-act="videoprompt" type="button" title="씬별 시나리오 + Runway/Sora/Kling 영어 영상 프롬프트(카메라·조명·--ar)">🎥 영상 프롬프트팩</button>
+          <button class="command" data-media-act="formconvert" type="button" title="현재 산출물을 소설↔시나리오로 전환">🔄 소설↔시나리오</button>
+          <select id="festivalTarget" aria-label="영화제">
+            <option value="general">일반 AI 영화제</option>
+            <option value="runwayAIFF">Runway AIFF</option>
+            <option value="dubaiAIFF">Dubai/1Billion</option>
+            <option value="siaiff">SIAIFF</option>
+          </select>
+          <button class="command" data-media-act="festival" type="button" title="AI 영화제 예술성·독창성 지수 + 심사위원 공감대 예측 리뷰">🏆 영화제 감수</button>
+        </div>
         <div class="tool-tabs" id="mediaToolpack" style="margin-top:8px" aria-label="제작 도구팩"></div>
         <div class="tool-result md-output" id="mediaResult" hidden></div>
+      </div>
+    </div>
+
+    <!-- 감독 원시트 (Director One-Sheet) 모달 -->
+    <div class="modal-backdrop" id="onesheetModal" hidden>
+      <div class="modal-card tool-modal" role="dialog" aria-modal="true" aria-label="감독 원시트">
+        <button class="modal-close" id="onesheetClose" type="button" aria-label="닫기">✕</button>
+        <div class="tool-eyebrow">🎬 감독 원시트 (Director One-Sheet) <span id="onesheetLockBadge" class="ds-hint" hidden>🔒 LOCK</span></div>
+        <p class="section-hint" style="margin-top:0">감정·상징·결말·시각/문체 문법·금지규칙을 원시트로 <strong>잠그면(LOCK)</strong>, 모든 장르·매체의 산출물이 이 잠금값을 따릅니다. <strong>프롬프트보다 잠금값이 우선</strong>이고, 감정은 설명이 아니라 사물로 번역됩니다.</p>
+        <div class="tool-tabs" id="onesheetActions">
+          <button class="command primary" data-os-act="generate" type="button" title="현재 기획·아이디어로 12블록 원시트 자동 생성"><span class="dot"></span><span>원시트 생성</span></button>
+          <button class="command" data-os-act="lock" type="button" id="onesheetLockBtn" title="이 원시트를 잠가 모든 산출물에 구속 조건으로 주입">🔒 LOCK</button>
+          <button class="command" data-os-act="integrity" type="button" title="서사 무결성 100점 채점 + 통과 게이트">📊 서사 무결성</button>
+          <button class="command" data-os-act="conte" type="button" title="컷별 콘티 + 6층 프롬프트 + 네거티브 컴파일">🎞 콘티·프롬프트</button>
+        </div>
+        <div id="onesheetBody" class="onesheet-body"></div>
+        <div id="onesheetResult" class="tool-result md-output" hidden></div>
       </div>
     </div>
 

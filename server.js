@@ -31,6 +31,21 @@ const {
   buildConvertPrompt, localConvert,
 } = require("./lib/media-features");
 const { isMedium } = require("./lib/medium");
+const { designElements, recommendedDesignSpec } = require("./lib/design-spec");
+const {
+  buildOneSheetPrompt, parseOneSheet, localOneSheet,
+  buildIntegrityPrompt, parseIntegrity, localIntegrity,
+  buildContePrompt, localConte,
+} = require("./lib/onesheet");
+const {
+  buildTechMapPrompt, parseTechMap, localTechMap,
+  buildVideoPromptPrompt, localVideoPrompt,
+  buildFestivalPrompt, parseFestival, localFestival,
+  buildFormConvertPrompt, localFormConvert,
+} = require("./lib/aifilm");
+const {
+  buildVisualContePrompt, localVisualConte, isVisual: isVisualMedium, AI_VIDEO_MODELS,
+} = require("./lib/aianimation");
 const {
   buildGuaranteePrompt, parseGuarantee, localGuarantee,
   buildUpgradeBrief, scoreGuarantee,
@@ -532,6 +547,175 @@ async function handleMediaAudit(req, res) {
   }
 }
 
+// Tech-to-Story Mapper: AI 제약 → 서사 장치, AI 강점 → 메타포. JSON.
+async function handleTechMap(req, res) {
+  const payload = await readJson(req);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const idea = String(payload.idea || input.logline || "");
+  const model = payload.model || config.defaultModel;
+  const mode = resolveMode();
+  if (mode === "local") return sendJson(res, 200, { ok: true, techmap: localTechMap({ input, medium, idea }) });
+  try {
+    const { system, user } = buildTechMapPrompt({ input, medium, idea });
+    const { text } = await streamMessage({ provider: mode, model, system, messages: [{ role: "user", content: user }], temperature: 0.6, maxTokens: 1800 });
+    const techmap = parseTechMap(text);
+    return sendJson(res, 200, { ok: true, techmap: techmap || localTechMap({ input, medium, idea }), note: techmap ? undefined : "파싱 실패로 폴백" });
+  } catch (err) { return sendJson(res, 200, { ok: true, techmap: localTechMap({ input, medium, idea }), note: err?.message }); }
+}
+
+// Festival Taste Alignment: AI 영화제 예술성·독창성 + 심사위원 공감대 리뷰. JSON.
+async function handleFestival(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const festival = payload.festival || "general";
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+  if (!digest.trim()) return sendJson(res, 400, { ok: false, error: "감수할 작품 발췌가 없습니다." });
+  const mode = resolveMode();
+  if (mode === "local") return sendJson(res, 200, { ok: true, festival: localFestival({ input, festival }) });
+  try {
+    const { system, user } = buildFestivalPrompt({ input, medium, digest, festival });
+    const { text } = await streamMessage({ provider: mode, model, system, messages: [{ role: "user", content: user }], temperature: 0.5, maxTokens: 2000 });
+    const f = parseFestival(text);
+    return sendJson(res, 200, { ok: true, festival: f || localFestival({ input, festival }), note: f ? undefined : "파싱 실패로 폴백" });
+  } catch (err) { return sendJson(res, 200, { ok: true, festival: localFestival({ input, festival }), note: err?.message }); }
+}
+
+// Cinematic Prompt Generator: 씬별 시나리오 + 영어 영상 생성 프롬프트. SSE.
+async function handleVideoPrompt(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const format = payload.format || input.format || "medium";
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") { const s = localVideoPrompt({ input, medium }); emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return; }
+  try {
+    const { system, user } = buildVideoPromptPrompt({ input, medium, digest, format });
+    let acc = "";
+    const { text } = await streamMessage({ provider, model, system, signal, messages: [{ role: "user", content: user }], temperature: 0.6, maxTokens: 4000, onText: (c) => { acc += c; emit("delta", { text: c }); } });
+    emit("done", { ok: true, result: (text || acc).trim() || localVideoPrompt({ input, medium }) });
+  } catch (err) { if (err?.name !== "AbortError") { const s = localVideoPrompt({ input, medium }); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); } } finally { res.end(); }
+}
+
+// Novel ↔ Script 쌍방향 전환. SSE.
+async function handleFormConvert(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const text = String(payload.text || "");
+  const from = payload.from || "novel";
+  const to = payload.to || "script";
+  const model = payload.model || config.defaultModel;
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") { const s = localFormConvert({ text, to }); emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return; }
+  try {
+    const { system, user } = buildFormConvertPrompt({ input, text, from, to, medium });
+    let acc = "";
+    const { text: out } = await streamMessage({ provider, model, system, signal, messages: [{ role: "user", content: user }], temperature: 0.7, maxTokens: 3000, onText: (c) => { acc += c; emit("delta", { text: c }); } });
+    emit("done", { ok: true, result: (out || acc).trim() || localFormConvert({ text, to }) });
+  } catch (err) { if (err?.name !== "AbortError") { const s = localFormConvert({ text, to }); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); } } finally { res.end(); }
+}
+
+// 감독 원시트 생성: 아이디어 → 12블록 원시트(JSON). 전 매체·장르. SSE 아님.
+async function handleOneSheet(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const genre = payload.genre || input.genre || "";
+  const format = payload.format || input.format || "medium";
+  const model = payload.model || config.defaultModel;
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, fallback: true, onesheet: localOneSheet({ input, medium, genre, format }) });
+  }
+  try {
+    const { system, user } = buildOneSheetPrompt({ input, medium, genre, format });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.6, maxTokens: 3200,
+    });
+    const onesheet = parseOneSheet(text);
+    if (!onesheet) return sendJson(res, 200, { ok: true, fallback: true, onesheet: localOneSheet({ input, medium, genre, format }), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, onesheet });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, fallback: true, onesheet: localOneSheet({ input, medium, genre, format }), note: err?.message });
+  }
+}
+
+// 서사 무결성 심사: 원시트 LOCK 기준 100점 채점 + 게이트. 전 매체·장르. SSE 아님.
+async function handleIntegrity(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const oneSheet = payload.oneSheet || input.oneSheet || null;
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+  if (!digest.trim()) return sendJson(res, 400, { ok: false, error: "심사할 산출물이 없습니다." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, integrity: localIntegrity(input, medium, oneSheet, digest) });
+  }
+  try {
+    const { system, user } = buildIntegrityPrompt({ input, medium, oneSheet, digest });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.4, maxTokens: 1600,
+    });
+    const integrity = parseIntegrity(text);
+    if (!integrity) return sendJson(res, 200, { ok: true, integrity: localIntegrity(input, medium, oneSheet, digest), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, integrity });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, integrity: localIntegrity(input, medium, oneSheet, digest), note: err?.message });
+  }
+}
+
+// 콘티 + 6층 프롬프트 컴파일: 원시트 LOCK 기준 컷별 콘티·프롬프트 팩. SSE 스트리밍.
+async function handleConte(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const oneSheet = payload.oneSheet || input.oneSheet || null;
+  const format = payload.format || input.format || "medium";
+  const targetModel = payload.targetModel || input.videoModel || "kling";
+  const model = payload.model || config.defaultModel;
+  // 시각 매체(애니/영화 등)는 '컷별 콘티 + 생성 프롬프트 페어'(모델 최적화), 텍스트 매체는 장면 콘티.
+  const visual = isVisualMedium(medium);
+
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") {
+    const s = visual ? localVisualConte({ input, medium, oneSheet, format, targetModel }) : localConte({ input, medium, oneSheet, format });
+    emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return;
+  }
+  try {
+    const { system, user } = visual
+      ? buildVisualContePrompt({ input, medium, oneSheet, format, targetModel })
+      : buildContePrompt({ input, medium, oneSheet, format });
+    let acc = "";
+    const { text } = await streamMessage({
+      provider, model, system, signal,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.6, maxTokens: 4000,
+      onText: (chunk) => { acc += chunk; emit("delta", { text: chunk }); },
+    });
+    const fb = () => (visual ? localVisualConte({ input, medium, oneSheet, format, targetModel }) : localConte({ input, medium, oneSheet, format }));
+    const full = (text || acc).trim() || fb();
+    emit("done", { ok: true, result: full });
+  } catch (err) {
+    if (err?.name !== "AbortError") { const s = (visual ? localVisualConte({ input, medium, oneSheet, format, targetModel }) : localConte({ input, medium, oneSheet, format })); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); }
+  } finally { res.end(); }
+}
+
 // 흥행 보증서: 전체 산출물 발췌를 매체 승리 조건으로 채점·증명. SSE 아님.
 async function handleMediaGuarantee(req, res) {
   const payload = await readJson(req, 8_000_000);
@@ -850,6 +1034,19 @@ async function handleApi(req, res, pathname) {
     });
   }
 
+  if (req.method === "GET" && pathname === "/api/design-spec") {
+    const query = new URL(req.url, "http://localhost").searchParams;
+    const medium = query.get("medium") || "film";
+    const format = query.get("format") || "medium";
+    return sendJson(res, 200, {
+      ok: true,
+      medium,
+      format,
+      elements: designElements(medium),
+      recommend: recommendedDesignSpec(medium, format),
+    });
+  }
+
   if (req.method === "GET" && pathname === "/api/platform-meta") {
     return sendJson(res, 200, {
       ok: true,
@@ -909,6 +1106,34 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/media-audit") {
     return handleMediaAudit(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/techmap") {
+    return handleTechMap(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/festival") {
+    return handleFestival(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/videoprompt") {
+    return handleVideoPrompt(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/formconvert") {
+    return handleFormConvert(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/onesheet") {
+    return handleOneSheet(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/integrity") {
+    return handleIntegrity(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/conte") {
+    return handleConte(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/media-guarantee") {

@@ -148,6 +148,23 @@ const DIRECTOR_PRESETS = {
 // 매체 제작 도구팩 ([tool, label]). 백엔드 MEDIA_TOOLS와 키 일치.
 const MEDIA_TOOLPACK = [["logline", "로그라인"], ["tagline", "태그라인·카피"], ["charactersheet", "캐릭터 시트"], ["cuesheet", "음악 큐시트"], ["shotlist", "샷리스트·콘티"]];
 
+// 감독 원시트 12블록(백엔드 onesheet.js ONESHEET_BLOCKS와 키 일치). [key, label, 텍스트매체 라벨?]
+const ONESHEET_BLOCKS_KO = [
+  ["corePremise", "1. Core Premise (핵심 전제)"],
+  ["moralQuestion", "2. Moral Question (윤리적 질문)"],
+  ["emotionalWound", "3. Emotional Wound (내면 결핍)"],
+  ["centralObject", "4. Central Object (핵심 오브젝트)"],
+  ["characterEngine", "5. Character Engine (캐릭터 엔진)"],
+  ["worldTexture", "6. World Texture (세계 질감)"],
+  ["visualGrammar", "7. Visual Grammar (시각 문법)", "7. 장면·문체 문법"],
+  ["soundGrammar", "8. Sound Grammar (사운드 문법)", "8. 리듬·정서 문법"],
+  ["beatStructure", "9. Beat Structure (비트 구조)"],
+  ["continuityBible", "10. Continuity Bible (연속성 고정값)"],
+  ["forbiddenDrift", "11. Forbidden Drift (금지 규칙)"],
+  ["evaluationRubric", "12. Evaluation Rubric (검수 기준)"],
+];
+const VISUAL_MEDIA_KO = new Set(["animation", "film", "documentary", "drama", "advertising"]);
+
 const _origFieldLabels = {}; // 매체 라벨 복원용(웹소설 원본 캡처)
 
 // 현재 활성 매체(제작 스튜디오에서만 의미 있음; 그 외엔 웹소설로 간주).
@@ -217,8 +234,15 @@ function onMediumChange(applySteering = false) {
   applyFormatLabels(medium);
   applyMediumVisibility(medium);
   populateDirectorPresets(medium);
-  // 매체 작업대 버튼은 웹소설이 아닌 전용 파이프라인에서만 노출.
+  // 매체 작업대 버튼·AI 영상 모델 선택기는 웹소설이 아닌 전용 파이프라인에서만 노출.
   if (el("mediaToolsBtn")) el("mediaToolsBtn").hidden = (medium === "webnovel");
+  if (el("videoModelRow")) el("videoModelRow").hidden = (medium === "webnovel");
+  // 상세 설계 요소 패널: 웹소설 외 매체에서 노출. 명시적 매체 변경이면 추천값 적용, 아니면 유지.
+  const dsSection = el("designSpecSection");
+  if (dsSection) {
+    if (medium === "webnovel") { dsSection.hidden = true; }
+    else { dsSection.hidden = false; loadDesignSpec(medium, el("format").value, applySteering ? "apply" : "keep"); }
+  }
   // 사용자가 매체를 직접 바꾼 경우, 그 매체의 권장 보상/연출 가중치를 깐다(웹소설은 장르 권장값 유지).
   if (applySteering && medium !== "webnovel" && MEDIA_STEERING[medium]) {
     setSteering(MEDIA_STEERING[medium], false);
@@ -231,6 +255,37 @@ function onMediumChange(applySteering = false) {
   setActiveTab(AGENTS[0].id);
   localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
   if (typeof updateJourney === "function") updateJourney();
+}
+
+// 상세 설계 요소를 매체·포맷에 맞게 불러와 렌더한다.
+// mode="apply": 추천값으로 채움 / "keep": 기존 값 유지(비었으면 추천값).
+async function loadDesignSpec(medium, format, mode) {
+  try {
+    const res = await fetch(`/api/design-spec?medium=${encodeURIComponent(medium)}&format=${encodeURIComponent(format)}`);
+    const data = await res.json();
+    if (!data.ok) return;
+    state.designElements = data.elements || [];
+    state.designSpecMedium = medium;
+    const empty = !state.designSpec || !Object.keys(state.designSpec).length;
+    if (mode === "apply" || (mode === "keep" && empty)) {
+      state.designSpec = { ...(data.recommend || {}) };
+    }
+    renderDesignSpec();
+  } catch { /* 설계 요소 로드 실패는 치명적이지 않다 */ }
+}
+
+function renderDesignSpec() {
+  const body = el("designSpecBody");
+  if (!body) return;
+  body.innerHTML = (state.designElements || []).map((e) => {
+    const v = state.designSpec[e.key] || "";
+    const opts = (e.options || []).map((o) => `<option value="${escapeHtml(o)}"></option>`).join("");
+    return `<label class="field design-row">
+      <span>${escapeHtml(e.label)}${e.hint ? ` <span class="ds-hint" title="${escapeHtml(e.hint)}">ⓘ</span>` : ""}</span>
+      <input type="text" data-ds="${escapeHtml(e.key)}" list="dsopt_${escapeHtml(e.key)}" value="${escapeHtml(v)}" autocomplete="off" placeholder="추천값 또는 직접 입력" />
+      <datalist id="dsopt_${escapeHtml(e.key)}">${opts}</datalist>
+    </label>`;
+  }).join("");
 }
 
 // 장르 패밀리에 따라 SF 전용 필드 라벨을 전환한다.
@@ -246,7 +301,7 @@ const FIELD_LABELS = {
 };
 
 const SELECTORS = [
-  "ipTitle", "medium", "format", "directorStyle", "genre", "subgenre", "targetReader", "logline", "futureYear",
+  "ipTitle", "medium", "format", "directorStyle", "aiFilmMode", "videoModel", "genre", "subgenre", "targetReader", "logline", "futureYear",
   "cadence", "sfPremise", "coreTech", "scienceConstraint", "socialShift",
   "protagonist", "desire", "aiEntity", "antagonist", "worldRule", "seasonGoal",
   "tone", "manuscript", "feedback", "webtoonBranch", "globalBranch",
@@ -325,7 +380,7 @@ const DEFAULTS = Object.fromEntries(
   SELECTORS.map((id) => [id, ["webtoonBranch", "globalBranch", "fanCommunity"].includes(id)]),
 );
 // 범용 웹소설 제작실이 기본. 박성우(foresight) 모드 진입 시에만 SF(aiForesight)로 전환된다.
-Object.assign(DEFAULTS, { genre: "romanceFantasy", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "", medium: "webnovel", format: "long", directorStyle: "" });
+Object.assign(DEFAULTS, { genre: "romanceFantasy", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "", medium: "webnovel", format: "long", directorStyle: "", videoModel: "kling" });
 ["ipTitle", "targetReader", "logline", "sfPremise", "coreTech", "scienceConstraint",
  "socialShift", "protagonist", "desire", "aiEntity", "antagonist", "worldRule",
  "seasonGoal", "tone", "manuscript", "feedback", "coreTags", "subgenre",
@@ -358,6 +413,11 @@ const state = {
   mediaUpgradeBrief: "", // 흥행 보증: 약한 입력 업그레이드 북극성 브리프(루프 중 주입)
   mediaReviseNotes: "",  // 흥행 보증: 보증 루프 보완 지시(재생성 시 주입)
   lastGuarantee: null,   // 마지막 흥행 보증서
+  designSpec: {},        // 상세 설계 요소 값 { key: value }
+  designElements: [],    // 현재 매체의 설계 요소 정의
+  designSpecMedium: "",  // designElements가 로드된 매체
+  oneSheet: {},          // 감독 원시트 12블록 { key: text }
+  oneSheetLocked: false, // LOCK 여부(잠기면 모든 산출물에 주입)
   abBusy: false,         // A/B 비교 생성 진행 중
   memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
   memoryBusy: {},        // n -> 메모리 생성 중 여부
@@ -800,6 +860,12 @@ function collectInput() {
   // 흥행 보증 루프: 업그레이드 북극성 브리프 / 보완 지시를 매체 에이전트에 주입(있을 때만).
   if (state.mediaUpgradeBrief) input.upgradeBrief = state.mediaUpgradeBrief;
   if (state.mediaReviseNotes) input.reviseNotes = state.mediaReviseNotes;
+  // 상세 설계 요소(노브 단위 확정값).
+  if (state.designSpec && Object.keys(state.designSpec).length) input.designSpec = { ...state.designSpec };
+  // 🔒 감독 원시트 LOCK — 잠겼을 때만 모든 에이전트에 주입(전 장르·전 매체).
+  if (state.oneSheetLocked && state.oneSheet && Object.keys(state.oneSheet).some((k) => String(state.oneSheet[k] || "").trim())) {
+    input.oneSheet = { ...state.oneSheet };
+  }
   return input;
 }
 
@@ -835,6 +901,12 @@ function fillForm(data) {
   setSteering(data.steering && typeof data.steering === "object" ? data.steering : STEER_DEFAULT, false);
   state.references = Array.isArray(data._references) ? data._references : [];
   renderRefList();
+  // 상세 설계 요소 복원(onMediumChange의 keep 모드가 이 값을 유지·렌더).
+  state.designSpec = (data.designSpec && typeof data.designSpec === "object") ? { ...data.designSpec } : {};
+  // 감독 원시트 복원(저장된 oneSheet는 LOCK 상태로 저장된 것).
+  state.oneSheet = (data.oneSheet && typeof data.oneSheet === "object") ? { ...data.oneSheet } : {};
+  state.oneSheetLocked = Object.keys(state.oneSheet).length > 0;
+  if (typeof updateOnesheetLockUI === "function") updateOnesheetLockUI();
 }
 
 /* ------------------------------ Rendering ------------------------------- */
@@ -2689,6 +2761,203 @@ function handleMediaAction(act) {
   if (act === "critique") return mediaCritiqueAction();
   if (act === "audit") return mediaAuditAction();
   if (act === "convert") return mediaConvertAction();
+  if (act === "techmap") return mediaTechmap();
+  if (act === "festival") return mediaFestival();
+  if (act === "videoprompt") return mediaVideoprompt();
+  if (act === "formconvert") return mediaFormconvert();
+}
+
+/* ----------------------- 🎥 AI 영상 제작 도구 ----------------------- */
+function onesheetTextSafe() { return (typeof onesheetText === "function") ? onesheetText() : ""; }
+
+async function mediaTechmap() {
+  mediaBusy("기술 → 서사 매핑 중…");
+  try {
+    const data = await mediaPost("/api/techmap", { input: collectInput(), medium: currentMedium(), idea: (el("ideaInput") && el("ideaInput").value) || el("logline").value || "", model: el("modelSelect").value });
+    if (!data.ok || !data.techmap) throw new Error(data.error || "매핑 실패");
+    const t = data.techmap;
+    const hard = (t.hardElements || []).map((e) => `<li><strong>${escapeHtml(e.element)}</strong> — ${escapeHtml(e.why)} → <em>${escapeHtml(e.workaround)}</em></li>`).join("");
+    const str = (t.aiStrengths || []).map((e) => `<li><strong>${escapeHtml(e.strength)}</strong> → ${escapeHtml(e.narrativeUse)}</li>`).join("");
+    mediaResultEl().innerHTML = `<div class="md-output"><h3>🛠 기술 → 서사 매핑</h3>
+      <p><strong>AI가 어려운 요소 → 서사적 치환</strong></p><ul>${hard}</ul>
+      <p><strong>AI 강점 → 메타포</strong></p><ul>${str}</ul>
+      ${t.rewriteSuggestion ? `<p><strong>재설계 로그라인:</strong> ${escapeHtml(t.rewriteSuggestion)}</p>` : ""}
+      <p style="opacity:.8">${escapeHtml(t.verdict || "")}</p></div>`;
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">매핑 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+async function mediaFestival() {
+  const digest = mediaDigest() || onesheetTextSafe();
+  if (!digest.trim()) { toast("먼저 산출물(또는 원시트)을 만드세요.", "warn"); return; }
+  mediaBusy("AI 영화제 감수 중…");
+  try {
+    const data = await mediaPost("/api/festival", { input: collectInput(), medium: currentMedium(), digest, festival: (el("festivalTarget") && el("festivalTarget").value) || "general", model: el("modelSelect").value });
+    if (!data.ok || !data.festival) throw new Error(data.error || "감수 실패");
+    const f = data.festival;
+    const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    const fit = (f.festivalFit || []).map((x) => `<tr><td>${escapeHtml(x.festival)}</td><td>${x.fit}/100</td><td style="opacity:.85">${escapeHtml(x.why)}</td></tr>`).join("");
+    mediaResultEl().innerHTML = `<div class="md-output"><h3>🏆 영화제 감수 — 예술성 ${f.artistryIndex}/100 · 독창성 ${f.originalityIndex}/100</h3>
+      <p><strong>심사위원 공감대 예측</strong><br>${escapeHtml(f.juryReview || "")}</p>
+      ${f.strengths && f.strengths.length ? `<p><strong>강점</strong></p><ul>${li(f.strengths)}</ul>` : ""}
+      ${f.risks && f.risks.length ? `<p><strong>탈락 위험</strong></p><ul>${li(f.risks)}</ul>` : ""}
+      <p><strong>수상권으로 끌어올릴 제안</strong></p><ul>${li(f.fixes)}</ul>
+      ${fit ? `<table><thead><tr><th>영화제</th><th>적합</th><th>이유</th></tr></thead><tbody>${fit}</tbody></table>` : ""}
+      <p style="opacity:.8">${escapeHtml(f.verdict || "")}</p></div>`;
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">감수 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+async function mediaVideoprompt() {
+  const digest = mediaDigest() || onesheetTextSafe();
+  await mediaStream("/api/videoprompt", { input: collectInput(), medium: currentMedium(), format: el("format").value, digest, model: el("modelSelect").value }, "씬별 영상 프롬프트팩(Runway/Sora/Kling)");
+}
+
+async function mediaFormconvert() {
+  const text = (state.buffers[state.activeTab] || "").trim() || mediaDigest();
+  if (!text) { toast("변환할 산출물(탭)을 먼저 만드세요.", "warn"); return; }
+  const isScript = /(S\d|씬\s|INT\.|EXT\.|지문|콘티|컷\d)/.test(text);
+  const to = isScript ? "novel" : "script";
+  const from = isScript ? "script" : "novel";
+  await mediaStream("/api/formconvert", { input: collectInput(), medium: currentMedium(), text, from, to, model: el("modelSelect").value }, to === "script" ? "→ 시나리오/콘티 변환" : "→ 소설 변환");
+}
+
+/* ----------------------- 🎬 감독 원시트 (Director One-Sheet) ----------------------- */
+
+function openOnesheetModal() {
+  renderOnesheet();
+  updateOnesheetLockUI();
+  el("onesheetResult").hidden = true;
+  el("onesheetResult").innerHTML = "";
+  el("onesheetModal").hidden = false;
+  document.body.classList.add("modal-open");
+}
+function closeOnesheetModal() { el("onesheetModal").hidden = true; document.body.classList.remove("modal-open"); }
+
+function renderOnesheet() {
+  const body = el("onesheetBody");
+  if (!body) return;
+  const visual = VISUAL_MEDIA_KO.has(currentMedium());
+  body.innerHTML = ONESHEET_BLOCKS_KO.map(([key, label, labelText]) => {
+    const lbl = (!visual && labelText) ? labelText : label;
+    const v = state.oneSheet[key] || "";
+    const big = (key === "beatStructure" || key === "forbiddenDrift" || key === "continuityBible");
+    return `<label class="field onesheet-row"><span>${escapeHtml(lbl)}</span>
+      <textarea data-os="${key}" rows="${big ? 4 : 2}" placeholder="‘원시트 생성’ 또는 직접 입력">${escapeHtml(v)}</textarea></label>`;
+  }).join("");
+}
+
+function updateOnesheetLockUI() {
+  const btn = el("onesheetLockBtn");
+  const badge = el("onesheetLockBadge");
+  if (btn) btn.textContent = state.oneSheetLocked ? "🔓 잠금 해제" : "🔒 LOCK";
+  if (badge) badge.hidden = !state.oneSheetLocked;
+  if (el("onesheetBtn")) el("onesheetBtn").classList.toggle("active", state.oneSheetLocked);
+}
+
+function syncOnesheetFromDom() {
+  document.querySelectorAll("#onesheetBody [data-os]").forEach((n) => { state.oneSheet[n.dataset.os] = n.value; });
+}
+function onesheetText() {
+  return ONESHEET_BLOCKS_KO.map(([k, label]) => { const v = (state.oneSheet[k] || "").trim(); return v ? `## ${label}\n${v}` : ""; }).filter(Boolean).join("\n\n");
+}
+function onesheetHasContent() { return Object.values(state.oneSheet).some((v) => String(v || "").trim()); }
+function onesheetDigest() {
+  let d = onesheetText();
+  const md = (typeof mediaDigest === "function") ? mediaDigest() : "";
+  if (md) d += "\n\n# 산출물\n" + md;
+  return d;
+}
+function onesheetBusy(msg) { const r = el("onesheetResult"); r.hidden = false; r.innerHTML = `<div class="impact-loading"><span class="dot"></span>${escapeHtml(msg)}</div>`; }
+
+async function generateOnesheet() {
+  onesheetBusy("감독 원시트 생성 중…");
+  try {
+    const data = await mediaPost("/api/onesheet", { input: collectInput(), medium: currentMedium(), genre: el("genre").value, format: el("format").value, model: el("modelSelect").value });
+    if (!data.ok || !data.onesheet) throw new Error(data.error || "원시트 생성 실패");
+    state.oneSheet = data.onesheet;
+    renderOnesheet();
+    el("onesheetResult").hidden = true;
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    toast(data.fallback ? "원시트를 생성했습니다(폴백). 검토 후 LOCK하세요." : "원시트를 생성했습니다. 검토·수정 후 🔒 LOCK하면 모든 산출물에 적용됩니다.", "success");
+  } catch (err) { el("onesheetResult").innerHTML = `<div class="impact-loading">생성 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+function toggleOnesheetLock() {
+  syncOnesheetFromDom();
+  if (!state.oneSheetLocked && !onesheetHasContent()) { toast("원시트를 먼저 생성하거나 입력하세요.", "warn"); return; }
+  state.oneSheetLocked = !state.oneSheetLocked;
+  updateOnesheetLockUI();
+  localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+  if (typeof updateJourney === "function") updateJourney();
+  toast(state.oneSheetLocked
+    ? "🔒 원시트를 LOCK했습니다 — 모든 장르·매체 산출물이 이 잠금값(주제·오브젝트·결말·금지규칙)을 따릅니다."
+    : "🔓 LOCK을 해제했습니다.", state.oneSheetLocked ? "success" : "info");
+}
+
+async function runIntegrity() {
+  syncOnesheetFromDom();
+  const digest = onesheetDigest();
+  if (!digest.trim()) { toast("원시트를 먼저 생성하세요.", "warn"); return; }
+  onesheetBusy("서사 무결성 채점 중…");
+  try {
+    const data = await mediaPost("/api/integrity", { input: collectInput(), medium: currentMedium(), oneSheet: state.oneSheet, digest, model: el("modelSelect").value });
+    if (!data.ok || !data.integrity) throw new Error(data.error || "채점 실패");
+    renderIntegrity(data.integrity);
+  } catch (err) { el("onesheetResult").innerHTML = `<div class="impact-loading">채점 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+function renderIntegrity(ig) {
+  const rows = Object.entries(ig.scores || {}).map(([k, v]) => {
+    const w = (ig.dims || []).find((d) => d[0] === k);
+    return `<tr><td>${escapeHtml(k)}</td><td>${v}/${w ? w[1] : "?"}</td></tr>`;
+  }).join("");
+  const gate = ig.gate || "";
+  const badge = gate === "통과" ? "✅" : gate === "구조 재작성" ? "⛔" : "🔁";
+  const list = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  const r = el("onesheetResult");
+  r.hidden = false;
+  r.innerHTML = `<div class="md-output">
+    <h3>📊 서사 무결성 — ${ig.overall}/100 · ${badge} <strong>${escapeHtml(gate)}</strong></h3>
+    <table><tbody>${rows}</tbody></table>
+    ${ig.weak && ig.weak.length ? `<p><strong>약한 항목</strong></p><ul>${list(ig.weak)}</ul>` : ""}
+    <p><strong>수정 지시</strong></p><ul>${list(ig.fixes)}</ul>
+    <p style="opacity:.8">${escapeHtml(ig.verdict || "")}</p>
+  </div>`;
+}
+
+async function runConte() {
+  syncOnesheetFromDom();
+  if (!onesheetText().trim()) { toast("원시트를 먼저 생성하세요.", "warn"); return; }
+  onesheetBusy("콘티·6층 프롬프트 컴파일 중…");
+  const r = el("onesheetResult");
+  try {
+    const res = await fetch("/api/conte", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: collectInput(), medium: currentMedium(), oneSheet: state.oneSheet, format: el("format").value, model: el("modelSelect").value }) });
+    if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
+    const reader = res.body.getReader(); const decoder = new TextDecoder();
+    let buf = "", acc = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf("\n\n")) !== -1) {
+        const raw = buf.slice(0, sep); buf = buf.slice(sep + 2);
+        let type = "message", dataLine = "";
+        raw.split("\n").forEach((line) => { if (line.startsWith("event:")) type = line.slice(6).trim(); else if (line.startsWith("data:")) dataLine += line.slice(5).trim(); });
+        if (!dataLine) continue;
+        let d; try { d = JSON.parse(dataLine); } catch { continue; }
+        if (type === "delta" && d.text) { acc += d.text; r.innerHTML = `<div class="md-output">${window.renderMarkdown(acc)}</div>`; }
+        else if (type === "done") { acc = d.result || acc; }
+      }
+    }
+    r.innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">🎞 콘티·프롬프트</span></div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
+  } catch (err) { r.innerHTML = `<div class="impact-loading">컴파일 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+function handleOnesheetAction(act) {
+  if (act === "generate") return generateOnesheet();
+  if (act === "lock") return toggleOnesheetLock();
+  if (act === "integrity") return runIntegrity();
+  if (act === "conte") return runConte();
 }
 
 /* ----------------------- ⚖️ 방향 비교 A/B ----------------------- */
@@ -3046,8 +3315,23 @@ function boot() {
   // 매체 변경: 전용 파이프라인 탭·라벨·가시성 재구성 + 권장 연출 가중치 적용.
   el("medium").addEventListener("change", () => onMediumChange(true));
   el("format").addEventListener("change", () => {
+    // 포맷 변경 시 그 포맷의 추천 설계값을 다시 적용(매체일 때).
+    if (currentMedium() !== "webnovel") loadDesignSpec(currentMedium(), el("format").value, "apply");
     localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
     el("runStatus").textContent = "수정됨";
+  });
+  // 상세 설계 요소: 입력 시 state 동기화 + 저장.
+  el("designSpecBody")?.addEventListener("input", (e) => {
+    const k = e.target && e.target.dataset && e.target.dataset.ds;
+    if (!k) return;
+    state.designSpec[k] = e.target.value;
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = "수정됨";
+  });
+  // 추천값 다시 적용 버튼.
+  el("designRecommendBtn")?.addEventListener("click", () => {
+    loadDesignSpec(currentMedium(), el("format").value, "apply");
+    toast("이 매체·포맷의 추천 설계값을 적용했습니다.", "info");
   });
   // 감독 스타일 변경: 저장(프롬프트 주입은 collectInput→input.directorStyle로 전달).
   el("directorStyle")?.addEventListener("change", () => {
@@ -3065,6 +3349,21 @@ function boot() {
     if (tool) { mediaToolAction(tool.dataset.mediaTool); }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && el("mediaModal") && !el("mediaModal").hidden) closeMediaModal(); });
+  // 🎬 감독 원시트 모달 (전 장르·전 매체)
+  el("onesheetBtn")?.addEventListener("click", openOnesheetModal);
+  el("onesheetClose")?.addEventListener("click", closeOnesheetModal);
+  el("onesheetModal")?.addEventListener("click", (e) => {
+    if (e.target === el("onesheetModal")) { closeOnesheetModal(); return; }
+    const act = e.target.closest("[data-os-act]");
+    if (act) handleOnesheetAction(act.dataset.osAct);
+  });
+  el("onesheetBody")?.addEventListener("input", (e) => {
+    if (e.target && e.target.dataset && e.target.dataset.os) {
+      state.oneSheet[e.target.dataset.os] = e.target.value;
+      if (state.oneSheetLocked) { localStorage.setItem("sfAgentInput", JSON.stringify(collectInput())); el("runStatus").textContent = "수정됨"; }
+    }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && el("onesheetModal") && !el("onesheetModal").hidden) closeOnesheetModal(); });
   // 세부 장르 변경: 성공 방정식 표시 갱신 + 저장
   el("subgenre").addEventListener("change", () => {
     renderSubgenreFormula(state.playbookCache[el("genre").value]);

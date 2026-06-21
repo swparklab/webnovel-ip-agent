@@ -531,3 +531,16 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .ab-cur-label { font-weight: 900; color: var(--violet); }
 .ab-cur-hint { color: var(--muted); font-size: 0.76rem; }
 @media (max-width: 600px) { .ab-cols { grid-template-columns: 1fr; } }
+
+/* 상세 설계 요소 패널 */
+.design-spec-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; }
+.design-row > span { display: flex; align-items: center; gap: 5px; }
+.ds-hint { cursor: help; opacity: .55; font-size: .85em; }
+#designRecommendBtn { font-size: .8em; margin-left: 6px; }
+@media (max-width: 680px) { .design-spec-body { grid-template-columns: 1fr; } }
+
+/* 감독 원시트 모달 */
+.onesheet-body { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 14px; max-height: 52vh; overflow-y: auto; padding-right: 4px; margin-top: 8px; }
+.onesheet-row textarea { font-size: .9em; }
+#onesheetLockBadge { font-size: .78em; color: #0c7b63; margin-left: 6px; }
+@media (max-width: 720px) { .onesheet-body { grid-template-columns: 1fr; } }
