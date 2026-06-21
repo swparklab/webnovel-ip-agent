@@ -145,9 +145,6 @@ const DIRECTOR_PRESETS = {
   advertising: [["emotionalStory", "감성 스토리텔링"], ["humorViral", "유머·바이럴"], ["visualImpact", "임팩트 비주얼"], ["persuasive", "정보·설득형"]],
 };
 
-// 매체 제작 도구팩 ([tool, label]). 백엔드 MEDIA_TOOLS와 키 일치.
-const MEDIA_TOOLPACK = [["logline", "로그라인"], ["tagline", "태그라인·카피"], ["charactersheet", "캐릭터 시트"], ["cuesheet", "음악 큐시트"], ["shotlist", "샷리스트·콘티"]];
-
 // 감독 원시트 12블록(백엔드 onesheet.js ONESHEET_BLOCKS와 키 일치). [key, label, 텍스트매체 라벨?]
 const ONESHEET_BLOCKS_KO = [
   ["corePremise", "1. Core Premise (핵심 전제)"],
@@ -451,6 +448,8 @@ const state = {
   oneSheet: {},          // 감독 원시트 12블록 { key: text }
   oneSheetLocked: false, // LOCK 여부(잠기면 모든 산출물에 주입)
   characterLock: "",     // 캐릭터 고정 토큰(잠기면 콘티·그림풍·영상 프롬프트에 주입)
+  toolkitMeta: { tools: [], cross: [] }, // 현재 매체 전문 도구팩 메타(/api/toolkit-meta)
+  toolkitDone: new Set(),// 이번 세션에서 실행한 도구 id(다음작업 추천용)
   abBusy: false,         // A/B 비교 생성 진행 중
   memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
   memoryBusy: {},        // n -> 메모리 생성 중 여부
@@ -2536,8 +2535,8 @@ function openMediaModal() {
   }
   const medium = currentMedium();
   el("mediaModalTitle").textContent = `${MEDIUM_LABELS_KO[medium] || "매체"} 작업대`;
-  el("mediaToolpack").innerHTML = `<span class="section-hint" style="margin:0 6px 0 0">제작 도구팩:</span>` +
-    MEDIA_TOOLPACK.map(([t, label]) => `<button class="command" type="button" data-media-tool="${t}">${label}</button>`).join("");
+  el("mediaToolpack").innerHTML = `<span class="section-hint" style="margin:0">전문 도구팩 불러오는 중…</span>`;
+  loadToolkit(medium); // 매체별 전문 도구팩 동적 렌더
   // 변환 대상에서 현재 매체는 비활성(같은 매체 변환 방지).
   Array.from(el("convertTarget").options).forEach((o) => { o.disabled = (o.value === medium); });
   if (el("convertTarget").value === medium) {
@@ -2574,7 +2573,7 @@ async function mediaStream(url, body, tag) {
     const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
     if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
     const reader = res.body.getReader(); const decoder = new TextDecoder();
-    let buf = "", acc = "";
+    let buf = "", acc = "", fallback = false;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -2587,10 +2586,10 @@ async function mediaStream(url, body, tag) {
         if (!dataLine) continue;
         let d; try { d = JSON.parse(dataLine); } catch { continue; }
         if (type === "delta" && d.text) { acc += d.text; mediaResultEl().innerHTML = window.renderMarkdown(acc); }
-        else if (type === "done") { acc = d.result || acc; }
+        else if (type === "done") { acc = d.result || acc; if (typeof d.fallback !== "undefined") fallback = !!d.fallback; }
       }
     }
-    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span></div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span>${trustBadge(fallback)}</div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
     return acc;
   } catch (err) {
     mediaResultEl().innerHTML = `<div class="impact-loading">실패: ${escapeHtml(err.message || "")}</div>`;
@@ -2786,10 +2785,98 @@ function renderGuaranteeCertificate(g, signal) {
   </div>`;
 }
 
-async function mediaToolAction(tool) {
+/* --------------------- 매체별 전문 도구팩 (Toolkit) --------------------- */
+const TK_GROUP_LABELS = { create: "✦ 생성·설계", diagnose: "📊 진단·심사", deliver: "📦 레퍼런스·딜리버리" };
+const TK_KIND_BADGE = { generator: "생성", planner: "설계", analyzer: "진단", reference: "레퍼런스", checklist: "체크" };
+
+function trustBadge(fallback) {
+  return fallback
+    ? `<span class="tk-trust tk-trust-local" title="API 키/구독 연결 시 실제 AI가 생성합니다">로컬 데모</span>`
+    : `<span class="tk-trust tk-trust-ai" title="실제 AI 모델이 생성한 결과입니다">실제 AI</span>`;
+}
+
+// 현재 매체의 전문 도구팩 메타를 받아 동적 렌더(종류 배지·그룹·툴팁).
+async function loadToolkit(medium) {
+  try {
+    const res = await fetch(`/api/toolkit-meta?medium=${encodeURIComponent(medium)}`);
+    const data = await res.json();
+    state.toolkitMeta = data && data.ok ? { tools: data.tools || [], cross: data.cross || [] } : { tools: [], cross: [] };
+  } catch { state.toolkitMeta = { tools: [], cross: [] }; }
+  renderToolkitButtons();
+}
+
+function renderToolkitButtons() {
+  const host = el("mediaToolpack");
+  if (!host) return;
+  const meta = state.toolkitMeta || { tools: [], cross: [] };
+  if (!meta.tools.length && !meta.cross.length) { host.innerHTML = `<span class="section-hint" style="margin:0">이 매체의 전문 도구팩이 없습니다.</span>`; return; }
+  const groups = { create: [], diagnose: [], deliver: [] };
+  meta.tools.forEach((t) => { (groups[t.group] || groups.create).push(t); });
+  const btn = (t) => {
+    const done = state.toolkitDone.has(t.id) ? " is-done" : "";
+    return `<button class="command tk-btn${done}" type="button" data-toolkit-id="${t.id}" title="${escapeHtml(t.whatItDoes)}"><span class="tk-kind tk-${t.group || "create"}">${TK_KIND_BADGE[t.kind] || t.kind}</span>${escapeHtml(t.label)}</button>`;
+  };
+  let html = `<div class="tk-head"><strong>${escapeHtml(MEDIUM_LABELS_KO[currentMedium()] || "매체")} 전문 도구팩</strong> <span class="section-hint" style="margin:0">— 이 매체에 특화된 실무 도구</span></div>`;
+  for (const g of ["create", "diagnose", "deliver"]) {
+    if (!groups[g].length) continue;
+    html += `<div class="tk-group"><span class="tk-group-label">${TK_GROUP_LABELS[g]}</span>${groups[g].map(btn).join("")}</div>`;
+  }
+  if (meta.cross.length) html += `<div class="tk-group"><span class="tk-group-label">🌐 공통</span>${meta.cross.map(btn).join("")}</div>`;
+  host.innerHTML = html;
+}
+
+// 🧭 다음 추천 도구 칩(생성→진단→딜리버리, 아직 안 한 것 우선).
+function nextStepChipsHtml() {
+  const meta = state.toolkitMeta || { tools: [] };
+  const order = { create: 0, diagnose: 1, deliver: 2 };
+  const rec = (meta.tools || []).filter((t) => !state.toolkitDone.has(t.id))
+    .sort((a, b) => (order[a.group] ?? 0) - (order[b.group] ?? 0)).slice(0, 3);
+  if (!rec.length) return "";
+  const chips = rec.map((t) => `<button class="tk-chip" type="button" data-toolkit-id="${t.id}" title="${escapeHtml(t.whatItDoes)}">${escapeHtml(t.label)} →</button>`).join("");
+  return `<div class="tk-next"><span class="section-hint" style="margin:0">🧭 다음 추천:</span>${chips}</div>`;
+}
+
+function renderToolkitAnalysis(r, fallback) {
+  const sevClass = { high: "tk-sev-high", medium: "tk-sev-mid", low: "tk-sev-low" };
+  const bars = Object.entries(r.scores || {}).map(([k, v]) => {
+    const n = Math.max(0, Math.min(100, Number(v) || 0));
+    return `<div class="tk-bar-row"><span class="tk-bar-label">${escapeHtml(k)}</span><span class="tk-bar"><span class="tk-bar-fill" style="width:${n}%"></span></span><span class="tk-bar-num">${n}</span></div>`;
+  }).join("");
+  const flags = (r.flags || []).map((f) => `<li class="${sevClass[f.severity] || "tk-sev-mid"}">${escapeHtml(f.issue)}${f.where ? ` <em>(${escapeHtml(f.where)})</em>` : ""}</li>`).join("");
+  const fixes = (r.fixes || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  const ov = Number(r.overall) || 0;
+  const ovClass = ov >= 80 ? "tk-ov-good" : ov >= 60 ? "tk-ov-mid" : "tk-ov-bad";
+  return `<div class="md-output">
+    <div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(r.label || "진단")}</span>${trustBadge(fallback)}</div>
+    <h3>종합 <span class="tk-ov ${ovClass}">${ov}/100</span></h3>
+    ${bars ? `<div class="tk-bars">${bars}</div>` : ""}
+    ${flags ? `<p><strong>⚠ 발견된 문제</strong></p><ul class="tk-flags">${flags}</ul>` : ""}
+    ${fixes ? `<p><strong>✅ 보강 지시</strong></p><ul>${fixes}</ul>` : ""}
+    ${r.verdict ? `<p style="opacity:.82">${escapeHtml(r.verdict)}</p>` : ""}
+  </div>`;
+}
+
+// 도구 실행: analyzer → JSON 진단(시각화), 그 외 → Markdown 스트림. 실행 후 다음추천 칩.
+async function mediaToolkitAction(toolId) {
+  const meta = state.toolkitMeta || { tools: [], cross: [] };
+  const def = [...(meta.tools || []), ...(meta.cross || [])].find((t) => t.id === toolId);
+  if (!def) { toast("도구를 찾을 수 없습니다.", "warn"); return; }
+  const medium = currentMedium();
   const text = (state.buffers[state.activeTab] || "").trim();
-  const label = (MEDIA_TOOLPACK.find(([t]) => t === tool) || [tool, tool])[1];
-  await mediaStream("/api/tool", { tool, text, mode: "", ctx: { medium: currentMedium(), genre: el("genre").value, tone: el("tone")?.value || "", protagonist: el("protagonist")?.value || "" }, model: el("modelSelect").value }, label);
+  if (def.kind === "analyzer") {
+    mediaBusy(`${def.label} 진단 중…`);
+    try {
+      const data = await mediaPost("/api/toolkit-analyze", { medium, tool: toolId, input: collectInput(), text, format: el("format").value, model: el("modelSelect").value });
+      if (!data.ok || !data.result) throw new Error(data.error || "진단 실패");
+      state.toolkitDone.add(toolId);
+      mediaResultEl().innerHTML = renderToolkitAnalysis(data.result, !!data.fallback) + nextStepChipsHtml();
+    } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">진단 실패: ${escapeHtml(err.message || "")}</div>`; }
+  } else {
+    await mediaStream("/api/toolkit", { medium, tool: toolId, input: collectInput(), text, format: el("format").value, model: el("modelSelect").value }, def.label);
+    state.toolkitDone.add(toolId);
+    mediaResultEl().insertAdjacentHTML("beforeend", nextStepChipsHtml());
+  }
+  renderToolkitButtons(); // 실행 표시(✓) 갱신
 }
 
 function handleMediaAction(act) {
@@ -3457,8 +3544,8 @@ function boot() {
     if (e.target === el("mediaModal")) { closeMediaModal(); return; }
     const act = e.target.closest("[data-media-act]");
     if (act) { handleMediaAction(act.dataset.mediaAct); return; }
-    const tool = e.target.closest("[data-media-tool]");
-    if (tool) { mediaToolAction(tool.dataset.mediaTool); }
+    const tk = e.target.closest("[data-toolkit-id]");
+    if (tk) { mediaToolkitAction(tk.dataset.toolkitId); }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && el("mediaModal") && !el("mediaModal").hidden) closeMediaModal(); });
   // 🎬 감독 원시트 모달 (전 장르·전 매체)

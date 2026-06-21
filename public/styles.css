@@ -544,3 +544,39 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .onesheet-row textarea { font-size: .9em; }
 #onesheetLockBadge { font-size: .78em; color: #0c7b63; margin-left: 6px; }
 @media (max-width: 720px) { .onesheet-body { grid-template-columns: 1fr; } }
+
+/* ===== 매체별 전문 도구팩 (Toolkit) ===== */
+.tk-head { width: 100%; margin: 2px 0 6px; }
+.tk-group { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0; }
+.tk-group-label { font-size: 11px; font-weight: 700; opacity: .7; margin-right: 4px; white-space: nowrap; }
+.tk-btn { display: inline-flex; align-items: center; gap: 6px; }
+.tk-btn.is-done { opacity: .62; }
+.tk-btn.is-done::after { content: "✓"; color: var(--accent, #0c7b63); font-weight: 700; margin-left: 2px; }
+.tk-kind { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 999px; color: #fff; line-height: 1.5; }
+.tk-kind.tk-create { background: #0c7b63; }
+.tk-kind.tk-diagnose { background: #b4690e; }
+.tk-kind.tk-deliver { background: #5a4bb3; }
+/* 진단 결과 시각화 */
+.tk-ov { font-weight: 800; padding: 1px 8px; border-radius: 8px; }
+.tk-ov-good { background: rgba(12,123,99,.16); color: #0c7b63; }
+.tk-ov-mid { background: rgba(180,105,14,.16); color: #b4690e; }
+.tk-ov-bad { background: rgba(193,42,42,.16); color: #c12a2a; }
+.tk-bars { display: flex; flex-direction: column; gap: 5px; margin: 8px 0; }
+.tk-bar-row { display: grid; grid-template-columns: 96px 1fr 34px; align-items: center; gap: 8px; font-size: 12px; }
+.tk-bar-label { opacity: .85; text-align: right; }
+.tk-bar { height: 9px; background: rgba(127,127,127,.18); border-radius: 999px; overflow: hidden; }
+.tk-bar-fill { display: block; height: 100%; background: linear-gradient(90deg, #0c7b63, #14a884); border-radius: 999px; }
+.tk-bar-num { font-variant-numeric: tabular-nums; font-weight: 700; opacity: .8; }
+.tk-flags { list-style: none; padding-left: 0; }
+.tk-flags li { padding: 4px 8px; border-radius: 6px; margin: 3px 0; border-left: 3px solid; }
+.tk-flags li.tk-sev-high { border-color: #c12a2a; background: rgba(193,42,42,.07); }
+.tk-flags li.tk-sev-mid { border-color: #b4690e; background: rgba(180,105,14,.07); }
+.tk-flags li.tk-sev-low { border-color: #7a7a7a; background: rgba(127,127,127,.06); }
+/* 신뢰 배지 */
+.tk-trust { font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 6px; }
+.tk-trust-ai { background: rgba(12,123,99,.16); color: #0c7b63; }
+.tk-trust-local { background: rgba(127,127,127,.16); color: #777; }
+/* 다음 추천 칩 */
+.tk-next { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(127,127,127,.28); }
+.tk-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent, #0c7b63); color: var(--accent, #0c7b63); background: transparent; cursor: pointer; }
+.tk-chip:hover { background: rgba(12,123,99,.1); }

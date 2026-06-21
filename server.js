@@ -49,6 +49,11 @@ const {
 const { buildArtStylePrompt, localArtStyle } = require("./lib/artstyle");
 const { buildCharSheetPrompt, parseCharSheet, localCharSheet } = require("./lib/charactersheet");
 const {
+  toolkitMeta, toolkitTool, isAnalyzer,
+  buildToolkitPrompt, localToolkit,
+  buildToolkitAnalyzePrompt, parseToolkitAnalyze, localToolkitAnalyze,
+} = require("./lib/media-toolkit");
+const {
   buildGuaranteePrompt, parseGuarantee, localGuarantee,
   buildUpgradeBrief, scoreGuarantee,
 } = require("./lib/media-guarantee");
@@ -546,6 +551,65 @@ async function handleMediaAudit(req, res) {
     return sendJson(res, 200, { ok: true, audit });
   } catch (err) {
     return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest), note: err?.message });
+  }
+}
+
+// 매체별 전문 도구팩: 생성기/레퍼런스/플래너 → Markdown(SSE).
+async function handleToolkit(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const tool = String(payload.tool || "");
+  const text = String(payload.text || "");
+  const format = payload.format || input.format || "medium";
+  const model = payload.model || config.defaultModel;
+  const def = toolkitTool(medium, tool);
+  if (!def) return sendJson(res, 400, { ok: false, error: "알 수 없는 도구입니다." });
+  if (isAnalyzer(def)) return sendJson(res, 400, { ok: false, error: "분석기 도구는 /api/toolkit-analyze를 사용하세요." });
+
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") {
+    const s = localToolkit({ medium, tool, input }); emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return;
+  }
+  try {
+    const { system, user } = buildToolkitPrompt({ medium, tool, input, text, format });
+    let acc = "";
+    const { text: out } = await streamMessage({
+      provider, model, system, signal,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.7, maxTokens: 2600,
+      onText: (chunk) => { acc += chunk; emit("delta", { text: chunk }); },
+    });
+    const full = (out || acc).trim() || localToolkit({ medium, tool, input });
+    emit("done", { ok: true, result: full });
+  } catch (err) {
+    if (err?.name !== "AbortError") { const s = localToolkit({ medium, tool, input }); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); }
+  } finally { res.end(); }
+}
+
+// 매체별 전문 도구팩: 분석기 → JSON 진단(점수·플래그·보강). SSE 아님.
+async function handleToolkitAnalyze(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const tool = String(payload.tool || "");
+  const text = String(payload.text || "");
+  const format = payload.format || input.format || "medium";
+  const model = payload.model || config.defaultModel;
+  const def = toolkitTool(medium, tool);
+  if (!def) return sendJson(res, 400, { ok: false, error: "알 수 없는 도구입니다." });
+  const label = def.label;
+  const mode = resolveMode();
+  if (mode === "local") return sendJson(res, 200, { ok: true, result: { ...localToolkitAnalyze({ medium, tool, input, text }), label }, fallback: true });
+  try {
+    const { system, user } = buildToolkitAnalyzePrompt({ medium, tool, input, text, format });
+    const { text: out } = await streamMessage({ provider: mode, model, system, messages: [{ role: "user", content: user }], temperature: 0.4, maxTokens: 1800 });
+    const parsed = parseToolkitAnalyze(out);
+    if (parsed) return sendJson(res, 200, { ok: true, result: { ...parsed, label } });
+    return sendJson(res, 200, { ok: true, result: { ...localToolkitAnalyze({ medium, tool, input, text }), label }, fallback: true, note: "파싱 실패로 폴백" });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, result: { ...localToolkitAnalyze({ medium, tool, input, text }), label }, fallback: true, note: err?.message });
   }
 }
 
@@ -1087,6 +1151,12 @@ async function handleApi(req, res, pathname) {
     });
   }
 
+  if (req.method === "GET" && pathname === "/api/toolkit-meta") {
+    const query = new URL(req.url, "http://localhost").searchParams;
+    const medium = query.get("medium") || "film";
+    return sendJson(res, 200, { ok: true, ...toolkitMeta(medium) });
+  }
+
   if (req.method === "GET" && pathname === "/api/platform-meta") {
     return sendJson(res, 200, {
       ok: true,
@@ -1150,6 +1220,14 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/charsheet") {
     return handleCharSheet(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/toolkit") {
+    return handleToolkit(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/toolkit-analyze") {
+    return handleToolkitAnalyze(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/artstyle") {
