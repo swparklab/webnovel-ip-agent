@@ -2993,33 +2993,75 @@ function renderIntegrity(ig) {
   </div>`;
 }
 
+// /api/conte 스트림을 받아 최종 누적 텍스트를 반환(콘티/클립 공용 헬퍼).
+async function streamConteText(body, onProgress) {
+  const res = await fetch("/api/conte", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
+  const reader = res.body.getReader(); const decoder = new TextDecoder();
+  let buf = "", acc = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let sep;
+    while ((sep = buf.indexOf("\n\n")) !== -1) {
+      const raw = buf.slice(0, sep); buf = buf.slice(sep + 2);
+      let type = "message", dataLine = "";
+      raw.split("\n").forEach((line) => { if (line.startsWith("event:")) type = line.slice(6).trim(); else if (line.startsWith("data:")) dataLine += line.slice(5).trim(); });
+      if (!dataLine) continue;
+      let d; try { d = JSON.parse(dataLine); } catch { continue; }
+      if (type === "delta" && d.text) { acc += d.text; if (onProgress) onProgress(acc); }
+      else if (type === "done") { acc = d.result || acc; }
+    }
+  }
+  return acc;
+}
+
 async function runConte() {
   syncOnesheetFromDom();
   if (!onesheetText().trim()) { toast("원시트를 먼저 생성하세요.", "warn"); return; }
-  onesheetBusy("콘티·6층 프롬프트 컴파일 중…");
+  const clip = VISUAL_MEDIA_KO.has(currentMedium());
+  onesheetBusy(clip ? "5~15초 클립 단위 내용·생성 프롬프트 컴파일 중…" : "콘티·6층 프롬프트 컴파일 중…");
   const r = el("onesheetResult");
   try {
-    const res = await fetch("/api/conte", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ input: collectInput(), medium: currentMedium(), oneSheet: state.oneSheet, format: el("format").value, model: el("modelSelect").value }) });
-    if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
-    const reader = res.body.getReader(); const decoder = new TextDecoder();
-    let buf = "", acc = "";
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buf += decoder.decode(value, { stream: true });
-      let sep;
-      while ((sep = buf.indexOf("\n\n")) !== -1) {
-        const raw = buf.slice(0, sep); buf = buf.slice(sep + 2);
-        let type = "message", dataLine = "";
-        raw.split("\n").forEach((line) => { if (line.startsWith("event:")) type = line.slice(6).trim(); else if (line.startsWith("data:")) dataLine += line.slice(5).trim(); });
-        if (!dataLine) continue;
-        let d; try { d = JSON.parse(dataLine); } catch { continue; }
-        if (type === "delta" && d.text) { acc += d.text; r.innerHTML = `<div class="md-output">${window.renderMarkdown(acc)}</div>`; }
-        else if (type === "done") { acc = d.result || acc; }
-      }
-    }
-    r.innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">🎞 콘티·프롬프트</span></div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    const acc = await streamConteText(
+      { input: collectInput(), medium: currentMedium(), oneSheet: state.oneSheet, format: el("format").value, model: el("modelSelect").value },
+      (t) => { r.innerHTML = `<div class="md-output">${window.renderMarkdown(t)}</div>`; },
+    );
+    const tag = clip ? "🎬 AI 클립(5~15초)·생성 프롬프트" : "🎞 콘티·프롬프트";
+    r.innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${tag}</span></div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
   } catch (err) { r.innerHTML = `<div class="impact-loading">컴파일 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+// 🔁 AI 클립 + 피드백 루프백: 5~15초 클립 생성 → 서사 무결성 채점 → 약점 보완 재생성(최대 2라운드).
+async function runClipLoop() {
+  syncOnesheetFromDom();
+  if (!onesheetText().trim()) { toast("원시트를 먼저 생성하세요.", "warn"); return; }
+  const r = el("onesheetResult");
+  const medium = currentMedium();
+  const MAX = 2, BAR = 80;
+  let acc = "", ig = null, notes = "";
+  try {
+    for (let round = 1; round <= MAX; round++) {
+      onesheetBusy(`🔁 ${round}/${MAX} · AI 클립(5~15초) ${round > 1 ? "보완 " : ""}생성 중…`);
+      acc = await streamConteText(
+        { input: collectInput(), medium, oneSheet: state.oneSheet, format: el("format").value, reviseNotes: notes, model: el("modelSelect").value },
+        (t) => { r.innerHTML = `<div class="md-output">${window.renderMarkdown(t)}</div>`; },
+      );
+      onesheetBusy(`🔁 ${round}/${MAX} · 피드백 채점 중…`);
+      const data = await mediaPost("/api/integrity", { input: collectInput(), medium, oneSheet: state.oneSheet, digest: acc, model: el("modelSelect").value });
+      ig = data && data.integrity;
+      if (!ig || ig.overall >= BAR || round === MAX) break;
+      notes = [...(ig.weak || []).map((w) => `약점: ${w}`), ...(ig.fixes || [])].join("\n"); // 루프백 보완 지시
+      toast(`라운드 ${round}: ${ig.overall}/100 — 약점 보완 후 재생성합니다.`, "warn");
+    }
+    const pass = ig && ig.overall >= BAR;
+    const tag = ig ? `🔁 AI 클립 루프 · 피드백 ${ig.overall}/100 ${pass ? "✅" : "🔁"}` : "🔁 AI 클립 루프";
+    const remain = (ig && !pass && (ig.fixes || []).length)
+      ? `<div class="md-output"><p><strong>남은 보완점</strong></p><ul>${(ig.fixes || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("")}</ul></div>` : "";
+    r.innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${tag}</span></div>${remain}<div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    toast("🔁 AI 클립 + 피드백 루프 완료", "success");
+  } catch (err) { r.innerHTML = `<div class="impact-loading">루프 실패: ${escapeHtml(err.message || "")}</div>`; }
 }
 
 function handleOnesheetAction(act) {
@@ -3027,6 +3069,7 @@ function handleOnesheetAction(act) {
   if (act === "lock") return toggleOnesheetLock();
   if (act === "integrity") return runIntegrity();
   if (act === "conte") return runConte();
+  if (act === "cliploop") return runClipLoop();
 }
 
 /* ----------------------- ⚖️ 방향 비교 A/B ----------------------- */

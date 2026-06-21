@@ -726,8 +726,9 @@ async function handleConte(req, res) {
   const oneSheet = payload.oneSheet || input.oneSheet || null;
   const format = payload.format || input.format || "medium";
   const targetModel = payload.targetModel || input.videoModel || "kling";
+  const reviseNotes = payload.reviseNotes || ""; // 🔁 피드백 루프 보완 지시
   const model = payload.model || config.defaultModel;
-  // 시각 매체(애니/영화 등)는 '컷별 콘티 + 생성 프롬프트 페어'(모델 최적화), 텍스트 매체는 장면 콘티.
+  // 시각 매체(애니/영화 등)는 5~15초 클립 단위 '내용 + 생성 프롬프트 페어'(모델 최적화), 텍스트 매체는 장면 콘티.
   const visual = isVisualMedium(medium);
 
   const provider = resolveMode();
@@ -738,7 +739,7 @@ async function handleConte(req, res) {
   }
   try {
     const { system, user } = visual
-      ? buildVisualContePrompt({ input, medium, oneSheet, format, targetModel })
+      ? buildVisualContePrompt({ input, medium, oneSheet, format, targetModel, reviseNotes })
       : buildContePrompt({ input, medium, oneSheet, format });
     let acc = "";
     const { text } = await streamMessage({
