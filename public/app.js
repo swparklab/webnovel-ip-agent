@@ -47,6 +47,192 @@ const STUDIO_META = {
   business: { title: "IP 사업실", eyebrow: "IP Business / Monetization OS", brand: "수익화·OSMU·투자 IP 사업실", run: "사업 분석 실행", status: "사업실", toast: "IP 사업실로 전환했습니다. 현재 작품 IP로 수익·확장·투자 전략을 만듭니다." },
 };
 
+/* --------------------------- 매체(Medium) 전용 파이프라인 --------------------------- */
+// 'production' 스튜디오 안에서 매체를 고르면 그 매체의 전용 파이프라인이 실행된다.
+const MEDIUM_PIPELINE = {
+  webnovel: "production", animation: "animation", film: "film",
+  documentary: "documentary", drama: "drama", advertising: "advertising",
+};
+
+// 매체별 결과 탭(에이전트) — 백엔드 lib/media-studios.js 의 에이전트 id와 정확히 일치한다.
+const MEDIUM_AGENTS = {
+  animation: [
+    { id: "animConcept", name: "기획", tab: "기획", sub: "콘셉트·타깃·성공방정식" },
+    { id: "animWorld", name: "캐릭터·세계", tab: "캐릭터·세계", sub: "캐릭터 시트·세계관" },
+    { id: "animEpisodes", name: "에피소드 구성", tab: "구성", sub: "화별 훅·아크" },
+    { id: "animStoryboard", name: "콘티·1화 각본", tab: "콘티·각본", sub: "컷·레이아웃·음악" },
+    { id: "animDirection", name: "연출표", tab: "연출 설계", sub: "작화·색·음악·연출 호흡" },
+  ],
+  film: [
+    { id: "filmConcept", name: "로그라인·기획", tab: "기획", sub: "로그라인·톤·성공방정식" },
+    { id: "treatment", name: "트리트먼트", tab: "트리트먼트", sub: "3막 산문 줄거리" },
+    { id: "beatsheet", name: "비트시트", tab: "비트시트", sub: "시퀀스·미드포인트" },
+    { id: "scene", name: "씬 대본", tab: "씬 대본", sub: "핵심 1씬 시나리오" },
+    { id: "filmDirection", name: "연출 설계(감독노트)", tab: "연출 설계", sub: "미장센·촬영·색·편집·사운드" },
+  ],
+  documentary: [
+    { id: "docTopic", name: "주제·논점", tab: "주제·논점", sub: "핵심 질문·관점" },
+    { id: "docResearch", name: "리서치·팩트", tab: "리서치", sub: "팩트 시트·검증" },
+    { id: "docStructure", name: "구성안", tab: "구성", sub: "감정 아크" },
+    { id: "docInterview", name: "인터뷰·아카이브 설계", tab: "인터뷰·아카이브", sub: "질문·자료·현장" },
+    { id: "docDirection", name: "내러티브·연출", tab: "연출 설계", sub: "내레이션·현장음·감정적 진실" },
+  ],
+  drama: [
+    { id: "dramaConcept", name: "기획", tab: "기획", sub: "시즌 질문·톤·성공방정식" },
+    { id: "dramaWorld", name: "세계·인물", tab: "세계·인물", sub: "욕망·관계도" },
+    { id: "dramaSeason", name: "시즌 아크", tab: "시즌 설계", sub: "화별 훅·시즌 미스터리" },
+    { id: "dramaScript", name: "1화 각본", tab: "1화 각본", sub: "콜드 오픈·핵심 씬" },
+    { id: "dramaDirection", name: "연출 설계", tab: "연출 설계", sub: "미장센·색·편집·OST·엔딩" },
+  ],
+  advertising: [
+    { id: "adInsight", name: "브랜드 인사이트", tab: "인사이트", sub: "과제·소비자 인사이트" },
+    { id: "adBigIdea", name: "빅아이디어", tab: "빅아이디어", sub: "컨셉·태그라인" },
+    { id: "adCampaign", name: "캠페인 시리즈 구성", tab: "캠페인", sub: "편수·시리즈·매체" },
+    { id: "adStoryboard", name: "스토리보드·카피", tab: "스토리보드", sub: "컷·카피·CTA" },
+    { id: "adDirection", name: "미디어 연출", tab: "연출 설계", sub: "3초 후크·비주얼·사운드로고·CTA" },
+  ],
+};
+
+// 매체별 표시 메타(워크스페이스 제목·실행 버튼 라벨).
+const MEDIUM_META = {
+  webnovel: { title: "웹소설 제작실", run: "에이전트 실행" },
+  animation: { title: "애니메이션 기획실", run: "애니메이션 기획 실행" },
+  film: { title: "영화 기획실", run: "영화 기획 실행" },
+  documentary: { title: "다큐멘터리 기획실", run: "다큐 기획 실행" },
+  drama: { title: "드라마·OTT 기획실", run: "드라마 기획 실행" },
+  advertising: { title: "광고 기획실", run: "광고 기획 실행" },
+};
+
+const MEDIUM_LABELS_KO = {
+  webnovel: "웹소설", animation: "애니메이션", film: "영화",
+  documentary: "다큐멘터리", drama: "드라마·OTT", advertising: "광고",
+};
+
+// 포맷(단편/중편/장편) 표시명 — 매체별로 라벨만 적응(값은 short|medium|long 고정).
+const FORMAT_LABELS_BY_MEDIUM = {
+  webnovel:    { short: "단편(≈25화)", medium: "중편(≈75화)", long: "장편(200화+)" },
+  animation:   { short: "단편(OVA)", medium: "1쿨(12화)", long: "2쿨·시즌(24화)" },
+  film:        { short: "단편영화", medium: "중편영화", long: "장편영화" },
+  documentary: { short: "단편 다큐", medium: "중편 다큐", long: "시리즈 다큐" },
+  drama:       { short: "미니시리즈(6부)", medium: "시즌제(12부)", long: "롱폼(16부+)" },
+  advertising: { short: "단편 스팟(15~30초)", medium: "시리즈(3편)", long: "브랜드 캠페인" },
+};
+
+// 매체별 일부 필드 라벨 적응(웹소설은 원래 라벨 유지). 키는 span[data-label].
+const MEDIUM_FIELD_LABELS = {
+  film:        { seasonGoal: "작품 목표", protagonist: "주인공", centralConflict: "중심 갈등", manuscript: "시나리오 / 씬 메모" },
+  animation:   { seasonGoal: "작품 목표", protagonist: "주인공", centralConflict: "중심 갈등", manuscript: "시나리오 / 설정 메모" },
+  drama:       { seasonGoal: "시즌 목표", protagonist: "주인공", centralConflict: "중심 갈등", manuscript: "각본 / 씬 메모" },
+  documentary: { seasonGoal: "취재 목표 / 핵심 질문", protagonist: "핵심 인물 / 취재원", centralConflict: "핵심 논쟁", manuscript: "취재 메모 / 인터뷰" },
+  advertising: { seasonGoal: "캠페인 목표", protagonist: "브랜드 / 화자", centralConflict: "핵심 메시지", manuscript: "카피 / 스토리보드 메모" },
+};
+// 매체별 권장 보상/연출 스티어링 (백엔드 lib/media-features.js MEDIA_STEERING 미러).
+const MEDIA_STEERING = {
+  webnovel:    { world: 56, dopamine: 76, romance: 46, action: 64, mystery: 56, creativity: 52, pacing: 70, style: 62 },
+  film:        { world: 64, dopamine: 50, romance: 52, action: 62, mystery: 64, creativity: 74, pacing: 56, style: 78 },
+  animation:   { world: 70, dopamine: 64, romance: 54, action: 72, mystery: 56, creativity: 76, pacing: 64, style: 82 },
+  documentary: { world: 72, dopamine: 34, romance: 40, action: 38, mystery: 70, creativity: 60, pacing: 48, style: 62 },
+  drama:       { world: 58, dopamine: 66, romance: 72, action: 56, mystery: 74, creativity: 60, pacing: 64, style: 70 },
+  advertising: { world: 38, dopamine: 80, romance: 50, action: 64, mystery: 40, creativity: 84, pacing: 90, style: 80 },
+};
+
+// 매체별 감독/연출 스타일 프리셋 (백엔드 DIRECTOR_PRESETS 미러: [key, label]).
+const DIRECTOR_PRESETS = {
+  film: [["humanDrama", "감정 휴먼드라마"], ["genreThriller", "스타일리시 장르 스릴러"], ["artMinimal", "미니멀 예술영화"], ["blockbuster", "블록버스터 스펙터클"]],
+  animation: [["warmCel", "감성 셀 애니(따뜻한 정서)"], ["dynamicAction", "다이내믹 액션 작화"], ["popKitsch", "키치·팝 스타일"], ["theatricalDrama", "정통 극장판 드라마"]],
+  documentary: [["observational", "관찰형(다이렉트 시네마)"], ["investigative", "내레이션 주도 탐사"], ["interviewMosaic", "인터뷰 모자이크"], ["poeticEssay", "시적·에세이 다큐"]],
+  drama: [["bingeThriller", "몰아보기 스릴러"], ["melodrama", "감성 멜로"], ["noir", "텐션 누아르"], ["humanComedy", "휴먼 코미디"]],
+  advertising: [["emotionalStory", "감성 스토리텔링"], ["humorViral", "유머·바이럴"], ["visualImpact", "임팩트 비주얼"], ["persuasive", "정보·설득형"]],
+};
+
+// 매체 제작 도구팩 ([tool, label]). 백엔드 MEDIA_TOOLS와 키 일치.
+const MEDIA_TOOLPACK = [["logline", "로그라인"], ["tagline", "태그라인·카피"], ["charactersheet", "캐릭터 시트"], ["cuesheet", "음악 큐시트"], ["shotlist", "샷리스트·콘티"]];
+
+const _origFieldLabels = {}; // 매체 라벨 복원용(웹소설 원본 캡처)
+
+// 현재 활성 매체(제작 스튜디오에서만 의미 있음; 그 외엔 웹소설로 간주).
+function currentMedium() {
+  if (state.studio !== "production") return "webnovel";
+  const m = el("medium");
+  return (m && MEDIUM_PIPELINE[m.value]) ? m.value : "webnovel";
+}
+
+// 스튜디오 + 매체에 맞는 에이전트(탭) 목록.
+function activeAgentsFor(studio, medium) {
+  if (studio === "production" && medium && medium !== "webnovel" && MEDIUM_AGENTS[medium]) {
+    return MEDIUM_AGENTS[medium];
+  }
+  return STUDIOS[studio] || PRODUCTION_AGENTS;
+}
+
+// 매체별 필드 라벨 적용(제작 스튜디오에서만 호출). 웹소설은 원본 라벨로 복원.
+function applyMediumLabels(medium) {
+  const map = MEDIUM_FIELD_LABELS[medium] || {};
+  ["seasonGoal", "protagonist", "centralConflict", "manuscript"].forEach((id) => {
+    const span = document.querySelector(`span[data-label="${id}"]`);
+    if (!span) return;
+    if (!(id in _origFieldLabels)) _origFieldLabels[id] = span.textContent;
+    span.textContent = map[id] || _origFieldLabels[id];
+  });
+}
+
+// 포맷 옵션 라벨을 매체에 맞게 갱신(값은 고정).
+function applyFormatLabels(medium) {
+  const sel = el("format");
+  if (!sel) return;
+  const map = FORMAT_LABELS_BY_MEDIUM[medium] || FORMAT_LABELS_BY_MEDIUM.webnovel;
+  Array.from(sel.options).forEach((o) => { if (map[o.value]) o.textContent = map[o.value]; });
+}
+
+// 매체별로 해당 없는 필드(연재 플랫폼·리듬·OSMU 등)를 숨긴다.
+function applyMediumVisibility(medium) {
+  document.querySelectorAll("[data-medium-hide]").forEach((n) => {
+    const list = (n.getAttribute("data-medium-hide") || "").split(",").map((s) => s.trim());
+    n.hidden = list.includes(medium);
+  });
+}
+
+// 매체별 감독 스타일 드롭다운을 채운다(없는 매체면 행을 숨긴다).
+function populateDirectorPresets(medium) {
+  const sel = el("directorStyle");
+  const row = el("directorRow");
+  if (!sel) return;
+  const presets = DIRECTOR_PRESETS[medium] || [];
+  const want = sel.value;
+  sel.innerHTML = `<option value="">자동 (지정 안 함)</option>` +
+    presets.map(([k, label]) => `<option value="${k}">${label}</option>`).join("");
+  // 복원: 이전 선택이 이 매체에 있으면 유지.
+  if (presets.some(([k]) => k === want)) sel.value = want;
+  if (row) row.hidden = presets.length === 0;
+}
+
+// 매체 선택 변경: 결과 탭·라벨·가시성·실행 버튼·감독프리셋·도구버튼을 그 매체에 맞게 재구성.
+// applySteering=true(사용자가 직접 매체를 바꿈)면 그 매체 권장 보상/연출 가중치를 적용.
+function onMediumChange(applySteering = false) {
+  if (state.studio !== "production") return;
+  const medium = currentMedium();
+  AGENTS = activeAgentsFor("production", medium);
+  AGENTS.forEach((a) => { if (!(a.id in state.statuses)) state.statuses[a.id] = "idle"; });
+  applyMediumLabels(medium);
+  applyFormatLabels(medium);
+  applyMediumVisibility(medium);
+  populateDirectorPresets(medium);
+  // 매체 작업대 버튼은 웹소설이 아닌 전용 파이프라인에서만 노출.
+  if (el("mediaToolsBtn")) el("mediaToolsBtn").hidden = (medium === "webnovel");
+  // 사용자가 매체를 직접 바꾼 경우, 그 매체의 권장 보상/연출 가중치를 깐다(웹소설은 장르 권장값 유지).
+  if (applySteering && medium !== "webnovel" && MEDIA_STEERING[medium]) {
+    setSteering(MEDIA_STEERING[medium], false);
+  }
+  const runLabel = el("runAgent")?.querySelector("span:last-child");
+  if (runLabel) runLabel.textContent = MEDIUM_META[medium].run;
+  el("workspaceTitle").textContent = el("ipTitle").value || MEDIUM_META[medium].title;
+  renderAgentGrid();
+  renderTabs();
+  setActiveTab(AGENTS[0].id);
+  localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+  if (typeof updateJourney === "function") updateJourney();
+}
+
 // 장르 패밀리에 따라 SF 전용 필드 라벨을 전환한다.
 const FIELD_LABELS = {
   sf: {
@@ -60,7 +246,7 @@ const FIELD_LABELS = {
 };
 
 const SELECTORS = [
-  "ipTitle", "genre", "subgenre", "targetReader", "logline", "futureYear",
+  "ipTitle", "medium", "format", "directorStyle", "genre", "subgenre", "targetReader", "logline", "futureYear",
   "cadence", "sfPremise", "coreTech", "scienceConstraint", "socialShift",
   "protagonist", "desire", "aiEntity", "antagonist", "worldRule", "seasonGoal",
   "tone", "manuscript", "feedback", "webtoonBranch", "globalBranch",
@@ -139,7 +325,7 @@ const DEFAULTS = Object.fromEntries(
   SELECTORS.map((id) => [id, ["webtoonBranch", "globalBranch", "fanCommunity"].includes(id)]),
 );
 // 범용 웹소설 제작실이 기본. 박성우(foresight) 모드 진입 시에만 SF(aiForesight)로 전환된다.
-Object.assign(DEFAULTS, { genre: "romanceFantasy", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "" });
+Object.assign(DEFAULTS, { genre: "romanceFantasy", platform: "kakao", blendGenres: "", cadence: "daily", futureYear: "", medium: "webnovel", format: "long", directorStyle: "" });
 ["ipTitle", "targetReader", "logline", "sfPremise", "coreTech", "scienceConstraint",
  "socialShift", "protagonist", "desire", "aiEntity", "antagonist", "worldRule",
  "seasonGoal", "tone", "manuscript", "feedback", "coreTags", "subgenre",
@@ -169,6 +355,9 @@ const state = {
   audit: null,           // 완성도 심사 결과
   auditBusy: false,
   lastImpact: null,      // 마지막 AI 임팩트 리포트(Before/After) 결과
+  mediaUpgradeBrief: "", // 흥행 보증: 약한 입력 업그레이드 북극성 브리프(루프 중 주입)
+  mediaReviseNotes: "",  // 흥행 보증: 보증 루프 보완 지시(재생성 시 주입)
+  lastGuarantee: null,   // 마지막 흥행 보증서
   abBusy: false,         // A/B 비교 생성 진행 중
   memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
   memoryBusy: {},        // n -> 메모리 생성 중 여부
@@ -394,7 +583,8 @@ function applyStudioLabels(ops) {
 function setStudio(studio, opts = {}) {
   if (!STUDIOS[studio]) return;
   state.studio = studio;
-  AGENTS = STUDIOS[studio];
+  const medium = studio === "production" ? currentMedium() : "webnovel";
+  AGENTS = activeAgentsFor(studio, medium);
   const ops = studio === "platform";
   const fore = studio === "foresight";
   const meta = STUDIO_META[studio];
@@ -409,12 +599,18 @@ function setStudio(studio, opts = {}) {
   document.body.classList.toggle("studio-foresight", fore);
   document.body.classList.toggle("studio-business", studio === "business");
   applyStudioLabels(ops);
+  // 매체 선택(전용 파이프라인)은 제작 스튜디오에서만 노출·적용한다.
+  document.querySelectorAll(".medium-row").forEach((n) => { n.hidden = studio !== "production"; });
+  if (studio === "production") { applyMediumLabels(medium); applyFormatLabels(medium); }
+  applyMediumVisibility(medium);
 
   const runLabel = el("runAgent")?.querySelector("span:last-child");
-  if (runLabel) runLabel.textContent = meta.run;
+  if (runLabel) runLabel.textContent = (studio === "production") ? MEDIUM_META[medium].run : meta.run;
   if (el("brandEyebrow")) el("brandEyebrow").textContent = meta.brand;
   if (el("workspaceEyebrow")) el("workspaceEyebrow").textContent = meta.eyebrow;
-  el("workspaceTitle").textContent = ops ? meta.title : (el("ipTitle").value || meta.title);
+  el("workspaceTitle").textContent = ops
+    ? meta.title
+    : (el("ipTitle").value || (studio === "production" ? MEDIUM_META[medium].title : meta.title));
 
   // 박성우 모드 진입 시 장르를 SF(미래예측)로 맞추고 적응형 라벨을 갱신한다.
   if (fore) {
@@ -601,6 +797,9 @@ function collectInput() {
       .slice(0, 6000);
     input._references = state.references;
   }
+  // 흥행 보증 루프: 업그레이드 북극성 브리프 / 보완 지시를 매체 에이전트에 주입(있을 때만).
+  if (state.mediaUpgradeBrief) input.upgradeBrief = state.mediaUpgradeBrief;
+  if (state.mediaReviseNotes) input.reviseNotes = state.mediaReviseNotes;
   return input;
 }
 
@@ -920,7 +1119,10 @@ async function runAgent() {
   const controller = new AbortController();
   state.controller = controller;
   const model = el("modelSelect").value || state.config.defaultModel;
-  const pipeline = STUDIO_PIPELINE[state.studio] || "production";
+  // 제작 스튜디오에서는 선택한 매체의 전용 파이프라인을, 그 외엔 스튜디오 파이프라인을 쓴다.
+  const pipeline = (state.studio === "production")
+    ? (MEDIUM_PIPELINE[currentMedium()] || "production")
+    : (STUDIO_PIPELINE[state.studio] || "production");
 
   try {
     const res = await fetch("/api/run", {
@@ -1900,7 +2102,7 @@ async function ideateFill() {
     const res = await fetch("/api/ideate", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idea, genre: el("genre").value, subgenre: el("subgenre").value, blendGenres: collectInput().blendGenres, model: el("modelSelect").value }),
+      body: JSON.stringify({ idea, genre: el("genre").value, subgenre: el("subgenre").value, blendGenres: collectInput().blendGenres, medium: el("medium").value, format: el("format").value, model: el("modelSelect").value }),
     });
     const data = await res.json();
     if (!data.ok) throw new Error(data.error || "기획 생성 실패");
@@ -2217,6 +2419,278 @@ async function runTool() {
   }
 }
 
+/* ----------------------- 🎬 매체 작업대 ----------------------- */
+
+function openMediaModal() {
+  if (state.studio !== "production" || currentMedium() === "webnovel") {
+    toast("매체(애니/영화/다큐/드라마/광고)를 먼저 선택하세요.", "warn"); return;
+  }
+  const medium = currentMedium();
+  el("mediaModalTitle").textContent = `${MEDIUM_LABELS_KO[medium] || "매체"} 작업대`;
+  el("mediaToolpack").innerHTML = `<span class="section-hint" style="margin:0 6px 0 0">제작 도구팩:</span>` +
+    MEDIA_TOOLPACK.map(([t, label]) => `<button class="command" type="button" data-media-tool="${t}">${label}</button>`).join("");
+  // 변환 대상에서 현재 매체는 비활성(같은 매체 변환 방지).
+  Array.from(el("convertTarget").options).forEach((o) => { o.disabled = (o.value === medium); });
+  if (el("convertTarget").value === medium) {
+    const first = Array.from(el("convertTarget").options).find((o) => !o.disabled);
+    if (first) el("convertTarget").value = first.value;
+  }
+  el("mediaResult").hidden = true;
+  el("mediaResult").innerHTML = "";
+  el("mediaModal").hidden = false;
+  document.body.classList.add("modal-open");
+}
+
+function closeMediaModal() {
+  el("mediaModal").hidden = true;
+  document.body.classList.remove("modal-open");
+}
+
+// 모든 매체 산출물(탭) 발췌 결합 — 심사·변환용 digest.
+function mediaDigest() {
+  return AGENTS.map((a) => {
+    const t = (state.buffers[a.id] || "").trim();
+    return t ? `# ${a.name}\n${t}` : "";
+  }).filter(Boolean).join("\n\n");
+}
+
+function mediaResultEl() { const r = el("mediaResult"); r.hidden = false; return r; }
+function mediaBusy(msg) { mediaResultEl().innerHTML = `<div class="impact-loading"><span class="dot"></span>${escapeHtml(msg)}</div>`; }
+
+// SSE 스트리밍을 mediaResult로 받아 렌더(변환·도구팩).
+async function mediaStream(url, body, tag) {
+  mediaBusy(`${tag} 생성 중…`);
+  const controller = new AbortController();
+  try {
+    const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: controller.signal });
+    if (!res.ok || !res.body) throw new Error(`서버 오류 (HTTP ${res.status})`);
+    const reader = res.body.getReader(); const decoder = new TextDecoder();
+    let buf = "", acc = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let sep;
+      while ((sep = buf.indexOf("\n\n")) !== -1) {
+        const raw = buf.slice(0, sep); buf = buf.slice(sep + 2);
+        let type = "message", dataLine = "";
+        raw.split("\n").forEach((line) => { if (line.startsWith("event:")) type = line.slice(6).trim(); else if (line.startsWith("data:")) dataLine += line.slice(5).trim(); });
+        if (!dataLine) continue;
+        let d; try { d = JSON.parse(dataLine); } catch { continue; }
+        if (type === "delta" && d.text) { acc += d.text; mediaResultEl().innerHTML = window.renderMarkdown(acc); }
+        else if (type === "done") { acc = d.result || acc; }
+      }
+    }
+    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span></div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    return acc;
+  } catch (err) {
+    mediaResultEl().innerHTML = `<div class="impact-loading">실패: ${escapeHtml(err.message || "")}</div>`;
+  }
+}
+
+async function mediaPost(url, body) {
+  const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  return res.json();
+}
+
+async function mediaCritiqueAction() {
+  const id = state.activeTab;
+  const agent = AGENTS.find((a) => a.id === id);
+  const text = (state.buffers[id] || "").trim();
+  if (!agent || !text) { toast("먼저 산출물을 생성한 뒤, 평가할 탭을 여세요.", "warn"); return; }
+  mediaBusy(`'${agent.name}' 평가 중…`);
+  try {
+    const data = await mediaPost("/api/media-critique", { input: collectInput(), medium: currentMedium(), format: el("format").value, targetName: agent.name, text, model: el("modelSelect").value });
+    if (!data.ok || !data.critique) throw new Error(data.error || "평가 실패");
+    mediaResultEl().innerHTML = renderMediaCritique(agent.name, data.critique);
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">평가 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+function renderMediaCritique(name, c) {
+  const rows = Object.entries(c.scores || {}).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${v}/10</td></tr>`).join("");
+  const list = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  return `<div class="md-output">
+    <h3>📊 ${escapeHtml(name)} 평가 — 총점 ${c.overall}/100 · 방정식충실도 ${c.equationFit}/100</h3>
+    <table><tbody>${rows}</tbody></table>
+    ${c.violations && c.violations.length ? `<p><strong>⚠ 위반</strong></p><ul>${list(c.violations)}</ul>` : ""}
+    ${c.weaknesses && c.weaknesses.length ? `<p><strong>약점</strong></p><ul>${list(c.weaknesses)}</ul>` : ""}
+    <p><strong>✅ 개선 지시</strong></p><ul>${list(c.fixes)}</ul>
+  </div>`;
+}
+
+async function mediaAuditAction() {
+  const digest = mediaDigest();
+  if (!digest.trim()) { toast("먼저 매체 파이프라인을 실행해 산출물을 만드세요.", "warn"); return; }
+  mediaBusy("완성도 심사 중…");
+  try {
+    const data = await mediaPost("/api/media-audit", { input: collectInput(), medium: currentMedium(), format: el("format").value, digest, model: el("modelSelect").value });
+    if (!data.ok || !data.audit) throw new Error(data.error || "심사 실패");
+    mediaResultEl().innerHTML = renderMediaAudit(data.audit);
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">심사 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+function renderMediaAudit(a) {
+  const dims = Object.entries(a.dimensions || {}).map(([k, v]) => `<tr><td>${escapeHtml(k)}</td><td>${v}/100</td></tr>`).join("");
+  const fatal = (a.fatalWeaknesses || []).map((w) => `<li><strong>${escapeHtml(w.issue || "")}</strong> — ${escapeHtml(w.why || "")}</li>`).join("");
+  const plan = (a.revisionPlan || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  return `<div class="md-output">
+    <h3>🏅 완성도 심사 — ${a.overall}/100</h3>
+    <p>${escapeHtml(a.grade || "")}</p>
+    <table><tbody>${dims}</tbody></table>
+    ${fatal ? `<p><strong>치명적 약점</strong></p><ul>${fatal}</ul>` : ""}
+    ${plan ? `<p><strong>보강 로드맵</strong></p><ul>${plan}</ul>` : ""}
+    <p><em>${escapeHtml(a.verdict || "")}</em></p>
+  </div>`;
+}
+
+async function mediaConvertAction() {
+  const to = el("convertTarget").value;
+  const from = currentMedium();
+  if (to === from) { toast("다른 매체를 선택하세요.", "warn"); return; }
+  await mediaStream("/api/convert", { input: collectInput(), fromMedium: from, toMedium: to, format: el("format").value, digest: mediaDigest(), model: el("modelSelect").value }, `${MEDIUM_LABELS_KO[from]} → ${MEDIUM_LABELS_KO[to]} 변환`);
+}
+
+// 🚀 원클릭 흥행 보증: 입력 흥행급 업그레이드 → 빈 칸 보강 → 권장 연출 → 생성 →
+//    흥행 보증 채점 → 목표 미달이면 보완 지시 주입해 재생성(최대 2회) → 흥행 보증서.
+async function mediaAutopilot() {
+  closeMediaModal();
+  const idea = el("ideaInput").value.trim();
+  const medium = currentMedium();
+  if (medium === "webnovel") { toast("매체(애니/영화/다큐/드라마/광고)를 먼저 선택하세요.", "warn"); return; }
+  const fmt = el("format").value;
+  state.mediaUpgradeBrief = "";
+  state.mediaReviseNotes = "";
+  try {
+    // 1) 입력이 개떡같아도 흥행급으로 — 북극성 브리프 업그레이드.
+    el("runStatus").textContent = "입력을 흥행급으로 업그레이드 중";
+    try {
+      const up = await mediaPost("/api/media-upgrade", { input: collectInput(), medium, format: fmt, model: el("modelSelect").value });
+      if (up.ok && up.brief) state.mediaUpgradeBrief = up.brief;
+    } catch { /* 업그레이드 실패는 무시(보증 목표 주입만으로도 흥행급 강제) */ }
+    // 2) 빈 칸 보강(약하면).
+    const filled = PRESET_FIELDS.filter((k) => String(collectInput()[k] ?? "").trim()).length;
+    if (idea && filled < 3) { await ideateFill(); }
+    else if (filled > 0 && filled < PRESET_FIELDS.length) { await completeFill(); }
+    // 3) 권장 연출 가중치.
+    if (MEDIA_STEERING[medium]) setSteering(MEDIA_STEERING[medium], false);
+    // 4) 보증 루프.
+    const maxAttempts = 2;
+    let guarantee = null, signal = null;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      el("runStatus").textContent = `흥행 보증 생성 ${attempt}/${maxAttempts}`;
+      await runAgent();
+      if (state.controller?.signal?.aborted) return;
+      el("runStatus").textContent = `흥행 보증 채점 ${attempt}/${maxAttempts}`;
+      const g = await mediaPost("/api/media-guarantee", { input: collectInput(), medium, format: fmt, digest: mediaDigest(), model: el("modelSelect").value });
+      if (!g.ok) break;
+      guarantee = g.guarantee; signal = g.signal;
+      const bar = (signal && signal.bar && signal.bar.refined) || 90;
+      // 보수적 점수(결정론·심사 중 낮은 값)가 목표를 넘을 때까지 보완 루프를 돈다.
+      const det = (signal && signal.score) || 0;
+      const llm = (guarantee && Number.isFinite(guarantee.overall)) ? guarantee.overall : det;
+      const score = Math.min(det, llm);
+      if (score >= bar || attempt === maxAttempts) break;
+      // 미달 → 미달 승리 조건을 보완 지시로 주입하고 재생성.
+      state.mediaReviseNotes = guaranteeReviseNoteClient(guarantee, signal);
+    }
+    state.lastGuarantee = guarantee;
+    el("runStatus").textContent = "흥행 보증 완료";
+    const det = (signal && signal.score);
+    const llm = (guarantee && Number.isFinite(guarantee.overall)) ? guarantee.overall : det;
+    const sc = (det != null && llm != null) ? Math.min(det, llm) : (det != null ? det : llm);
+    const medLabel = MEDIUM_LABELS_KO[medium] || "이 매체";
+    toast(`🏆 ${medLabel} 1등작의 무기 장착 완료 — 보증점수 ${sc != null ? sc : "?"}/100`, "success");
+    showGuaranteeCertificate(guarantee, signal);
+  } catch (err) {
+    toast(err.message || "원클릭 흥행보증 실패", "error");
+  } finally {
+    state.mediaUpgradeBrief = "";
+    state.mediaReviseNotes = "";
+  }
+}
+
+// 미달 승리 조건 → 다음 재생성에 주입할 보완 지시.
+function guaranteeReviseNoteClient(g, signal) {
+  const bar = (signal && signal.bar && signal.bar.refined) || 90;
+  const lines = [`목표 보증 점수 ${bar}점 이상(현재 ${(signal && signal.score) != null ? signal.score : "?"}점). 아래 미달 승리 조건을 이번 재생성에서 반드시 채운다.`];
+  const push = (arr) => (arr || []).forEach((x) => { if (x) lines.push(`- ${x}`); });
+  push(g && g.gaps);
+  push(g && g.nextActions);
+  push(signal && (signal.missing || []).map((m) => `${m} 보강`));
+  return lines.join("\n");
+}
+
+// 🏆 흥행 보증서 — 현재 산출물을 매체 승리 조건으로 채점·증명.
+async function mediaGuaranteeAction() {
+  const digest = mediaDigest();
+  if (!digest.trim()) { toast("먼저 매체 파이프라인을 실행해 산출물을 만드세요.", "warn"); return; }
+  mediaBusy("흥행 보증서 심사 중…");
+  try {
+    const g = await mediaPost("/api/media-guarantee", { input: collectInput(), medium: currentMedium(), format: el("format").value, digest, model: el("modelSelect").value });
+    if (!g.ok || !g.guarantee) throw new Error(g.error || "보증 심사 실패");
+    state.lastGuarantee = g.guarantee;
+    mediaResultEl().innerHTML = renderGuaranteeCertificate(g.guarantee, g.signal);
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">보증 심사 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+// 보증서를 모달로 띄워 보여준다(원클릭 완료 후).
+function showGuaranteeCertificate(g, signal) {
+  if (!g && !signal) return;
+  openMediaModal();
+  mediaResultEl().innerHTML = renderGuaranteeCertificate(g, signal);
+}
+
+function renderGuaranteeCertificate(g, signal) {
+  // 정직성: 결정론 점수와 LLM 심사 점수 중 '보수적(낮은)' 값을 대표로 표기.
+  const llm = (g && Number.isFinite(g.overall)) ? g.overall : null;
+  const det = (signal && Number.isFinite(signal.score)) ? signal.score : null;
+  const score = (llm != null && det != null) ? Math.min(llm, det) : (llm != null ? llm : (det != null ? det : 0));
+  const bar = (signal && signal.bar) || (g && g.bar) || { first: 80, refined: 90 };
+  const grade = score >= (bar.refined || 90) ? "흥행 보증" : score >= (bar.first || 80) ? "흥행권" : score >= 60 ? "보완 필요" : "재설계 권장";
+  const pass = score >= (bar.refined || 90);
+  const scoreDetail = (llm != null && det != null) ? ` <span style="opacity:.6;font-size:.8em">(심사 ${llm} · 결정론 ${det}, 보수적 표기)</span>` : "";
+  const crit = (g && g.criteria) || {};
+  const critVals = Object.values(crit);
+  const metCount = critVals.filter((c) => c.met).length;
+  const totalCount = critVals.length || (signal ? (signal.met.length + signal.missing.length) : 0);
+  const medLabel = MEDIUM_LABELS_KO[currentMedium()] || "이 매체";
+  const banner = score >= (bar.refined || 90)
+    ? `🏆 <strong>${escapeHtml(medLabel)} 1등작의 승리 조건을 전부 장착했습니다.</strong> 흥행작이 가진 무기를 빠짐없이 갖췄습니다.`
+    : score >= (bar.first || 80)
+      ? `🔥 <strong>흥행권 진입.</strong> 1등작 조건 ${metCount}/${totalCount}을 장착했습니다. 아래 미달 항목만 채우면 보증 등급입니다.`
+      : `⚙️ 현재 ${metCount}/${totalCount} 장착. 아래 미달 승리 조건만 채우면 흥행권에 진입합니다 — <strong>원클릭 1등작 만들기</strong>가 자동으로 채웁니다.`;
+  const critRows = critVals.map((c) => {
+    const mark = c.met ? "✅" : "⛔";
+    const must = c.mustHave ? ' <span style="opacity:.7">[필수]</span>' : "";
+    return `<tr><td>${mark} ${escapeHtml(c.label)}${must}</td><td>${Number.isFinite(c.score) ? c.score : (c.met ? 80 : 40)}/100</td><td style="opacity:.85">${escapeHtml(c.note || "")}</td></tr>`;
+  }).join("");
+  const list = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+  return `<div class="md-output">
+    <h3>🏆 흥행 보증서 — ${score}/100${scoreDetail} · <strong>${escapeHtml(grade)}</strong> ${pass ? "✅" : `(목표 ${bar.refined}점)`}</h3>
+    <p style="font-size:1.02em;margin:.2em 0 .6em">${banner}</p>
+    ${g && g.verdict ? `<p style="opacity:.8">${escapeHtml(g.verdict)}</p>` : ""}
+    <table><thead><tr><th>승리 조건</th><th>점수</th><th>근거</th></tr></thead><tbody>${critRows}</tbody></table>
+    ${g && g.guaranteedClaims && g.guaranteedClaims.length ? `<p><strong>✅ 구조적으로 보증되는 흥행 요소</strong></p><ul>${list(g.guaranteedClaims)}</ul>` : ""}
+    ${g && g.gaps && g.gaps.length ? `<p><strong>⛔ 아직 보강할 것</strong></p><ul>${list(g.gaps)}</ul>` : ""}
+    ${g && g.nextActions && g.nextActions.length ? `<p><strong>🚀 1등으로 끌어올릴 다음 행동</strong></p><ul>${list(g.nextActions)}</ul>` : ""}
+    <p style="font-size:.95em"><strong>이 작품은 ${escapeHtml(MEDIUM_LABELS_KO[currentMedium()] || "이 매체")} 1등작이 갖춘 승리 조건을 장착했습니다.</strong> 흥행작이 가진 무기를 빠짐없이 갖췄습니다.</p>
+  </div>`;
+}
+
+async function mediaToolAction(tool) {
+  const text = (state.buffers[state.activeTab] || "").trim();
+  const label = (MEDIA_TOOLPACK.find(([t]) => t === tool) || [tool, tool])[1];
+  await mediaStream("/api/tool", { tool, text, mode: "", ctx: { medium: currentMedium(), genre: el("genre").value, tone: el("tone")?.value || "", protagonist: el("protagonist")?.value || "" }, model: el("modelSelect").value }, label);
+}
+
+function handleMediaAction(act) {
+  if (act === "autopilot") return mediaAutopilot();
+  if (act === "guarantee") return mediaGuaranteeAction();
+  if (act === "critique") return mediaCritiqueAction();
+  if (act === "audit") return mediaAuditAction();
+  if (act === "convert") return mediaConvertAction();
+}
+
 /* ----------------------- ⚖️ 방향 비교 A/B ----------------------- */
 
 function openAbModal() {
@@ -2388,6 +2862,7 @@ async function openProject(id) {
     setStudio(STUDIOS[p.input?.studio] ? p.input.studio : "production", { silent: true });
     fillForm(p.input || {});
     if (state.studio !== "platform") onGenreChange(false); // 장르 라벨 적용(제작·박성우)
+    if (state.studio === "production") onMediumChange(); // 저장된 매체에 맞춰 탭·라벨 재구성
     resetRun();
     if (p.report?.agents) {
       Object.values(p.report.agents).forEach((a) => {
@@ -2418,6 +2893,7 @@ function newProject() {
   // 박성우 모드면 SF 장르를 유지/복원한다.
   if (state.studio === "foresight") { const g = el("genre"); if (g) g.value = "aiForesight"; }
   if (state.studio !== "platform") onGenreChange(false); // 적응형 라벨 갱신(제작·박성우)
+  if (state.studio === "production") onMediumChange(); // 기본 매체(웹소설)로 탭·라벨 재구성
   el("workspaceTitle").textContent = (STUDIO_META[state.studio] || STUDIO_META.production).title;
   resetRun();
   setActiveTab(AGENTS[0].id);
@@ -2567,6 +3043,28 @@ function boot() {
     btn.addEventListener("click", () => setStudio(btn.dataset.studio)));
   // 장르 변경(사용자 선택): 적응형 라벨 + 기본 예시 자동 채움
   el("genre").addEventListener("change", () => onGenreChange(true));
+  // 매체 변경: 전용 파이프라인 탭·라벨·가시성 재구성 + 권장 연출 가중치 적용.
+  el("medium").addEventListener("change", () => onMediumChange(true));
+  el("format").addEventListener("change", () => {
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = "수정됨";
+  });
+  // 감독 스타일 변경: 저장(프롬프트 주입은 collectInput→input.directorStyle로 전달).
+  el("directorStyle")?.addEventListener("change", () => {
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    el("runStatus").textContent = "수정됨";
+  });
+  // 🎬 매체 작업대 모달
+  el("mediaToolsBtn")?.addEventListener("click", openMediaModal);
+  el("mediaClose")?.addEventListener("click", closeMediaModal);
+  el("mediaModal")?.addEventListener("click", (e) => {
+    if (e.target === el("mediaModal")) { closeMediaModal(); return; }
+    const act = e.target.closest("[data-media-act]");
+    if (act) { handleMediaAction(act.dataset.mediaAct); return; }
+    const tool = e.target.closest("[data-media-tool]");
+    if (tool) { mediaToolAction(tool.dataset.mediaTool); }
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && el("mediaModal") && !el("mediaModal").hidden) closeMediaModal(); });
   // 세부 장르 변경: 성공 방정식 표시 갱신 + 저장
   el("subgenre").addEventListener("change", () => {
     renderSubgenreFormula(state.playbookCache[el("genre").value]);
@@ -2601,6 +3099,8 @@ function boot() {
   if (savedStudio && STUDIOS[savedStudio] && savedStudio !== "production") {
     setStudio(savedStudio, { silent: true });
   }
+  // 제작 스튜디오면 저장/기본 매체에 맞춰 탭·라벨·가시성을 적용한다.
+  if (state.studio === "production") onMediumChange();
   updateJourney(); // 초기 렌더
 }
 

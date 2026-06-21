@@ -15,13 +15,26 @@ const { extractTextFromPdf } = require("./lib/pdf");
 const { buildCritiquePrompt, parseCritique, localCritique } = require("./lib/critique");
 const { buildSynopsisPrompt, parseMemory, localMemory, composeStorySoFar, composeCanonLock } = require("./lib/memory");
 const { buildImpactPrompt, parseImpact, localImpact } = require("./lib/impact");
-const { buildToolPrompt, localTool, TOOLS } = require("./lib/tools");
+const { buildToolPrompt, localTool, TOOLS, MEDIA_TOOLS } = require("./lib/tools");
 const { buildOutlinePrompt, parseOutline, localOutline, outlineGuideFor } = require("./lib/outline");
 const { steeringTemperature, recommendedSteering } = require("./lib/steering");
 const { buildWorkAuditPrompt, parseAudit, localAudit } = require("./lib/audit");
 const { buildLocalReport, scoreInput } = require("./lib/local-engine");
 const { buildOpsLocalReport } = require("./lib/platform-local");
 const { buildBizLocalReport } = require("./lib/business-local");
+const { buildMediaLocalReport } = require("./lib/media-local");
+const { MEDIA_AGENTS } = require("./lib/media-studios");
+const {
+  buildMediaImpactPrompt, localMediaImpact,
+  buildMediaCritiquePrompt, parseMediaCritique, localMediaCritique,
+  buildMediaAuditPrompt, localMediaAudit,
+  buildConvertPrompt, localConvert,
+} = require("./lib/media-features");
+const { isMedium } = require("./lib/medium");
+const {
+  buildGuaranteePrompt, parseGuarantee, localGuarantee,
+  buildUpgradeBrief, scoreGuarantee,
+} = require("./lib/media-guarantee");
 const { getPlaybook, COMMON, PLATFORM_PRIORITY } = require("./lib/playbook");
 const {
   PLATFORMS, TAXONOMY, PERSONAS, KR_SF_OVERLAY, REACTION_AXES,
@@ -54,11 +67,26 @@ const PIPELINES = {
   business: { order: BIZ_AGENT_ORDER, local: buildBizLocalReport, scored: false },
 };
 
+// 매체별 전용 파이프라인(애니/영화/다큐/드라마/광고)을 자동 등록한다.
+// order는 각 매체 에이전트의 id 순서, local은 매체 결정론 폴백.
+Object.keys(MEDIA_AGENTS).forEach((medium) => {
+  PIPELINES[medium] = {
+    order: MEDIA_AGENTS[medium].map((a) => a.id),
+    local: (input) => buildMediaLocalReport(medium, input),
+    scored: false,
+  };
+});
+
 // Resolve the export/iteration order for whichever pipeline produced a report.
+// 각 파이프라인의 에이전트 id 집합은 서로 겹치지 않으므로, 리포트에 존재하는
+// id로 파이프라인을 역추론한다(매체 파이프라인 포함).
 function orderFor(record) {
   const agents = record?.report?.agents || record?.agents || {};
-  if (OPS_AGENT_ORDER.some((id) => id in agents)) return OPS_AGENT_ORDER;
-  if (BIZ_AGENT_ORDER.some((id) => id in agents)) return BIZ_AGENT_ORDER;
+  for (const meta of Object.values(PIPELINES)) {
+    if (meta !== PIPELINES.production && meta.order.some((id) => id in agents)) {
+      return meta.order;
+    }
+  }
   return AGENT_ORDER;
 }
 
@@ -382,8 +410,9 @@ async function handleTool(req, res) {
   const mode = payload.mode || "";
   const ctx = payload.ctx || {};
   const model = payload.model || config.defaultModel;
-  if (!TOOLS[tool]) return sendJson(res, 400, { ok: false, error: "알 수 없는 도구입니다." });
-  if (TOOLS[tool].needsText && !text.trim()) return sendJson(res, 400, { ok: false, error: "내용을 입력하세요." });
+  const toolDef = TOOLS[tool] || MEDIA_TOOLS[tool];
+  if (!toolDef) return sendJson(res, 400, { ok: false, error: "알 수 없는 도구입니다." });
+  if (toolDef.needsText && !text.trim()) return sendJson(res, 400, { ok: false, error: "내용을 입력하세요." });
 
   const provider = resolveMode();
   const { emit, signal } = streamingReply(res, req);
@@ -414,27 +443,183 @@ async function handleImpact(req, res) {
   const genre = payload.genre || input.genre || "aiForesight";
   const subgenre = payload.subgenre || input.subgenre || "";
   const model = payload.model || config.defaultModel;
+  // 매체(전용 파이프라인)면 그 매체 기준으로 Before/After를 진단한다.
+  const medium = payload.medium || input.medium || "webnovel";
+  const format = payload.format || input.format || "medium";
+  const isMedia = isMedium(medium) && medium !== "webnovel";
   if (!idea && !input.logline && !input.sfPremise) {
     return sendJson(res, 400, { ok: false, error: "진단할 아이디어를 입력하세요." });
   }
+  const localFb = () => (isMedia ? localMediaImpact(idea, input, medium, format) : localImpact(idea, input, genre, subgenre));
 
   const mode = resolveMode();
   if (mode === "local") {
-    return sendJson(res, 200, { ok: true, fallback: true, impact: localImpact(idea, input, genre, subgenre) });
+    return sendJson(res, 200, { ok: true, fallback: true, impact: localFb() });
   }
   try {
-    const { system, user } = buildImpactPrompt(idea, input, genre, subgenre);
+    const { system, user } = isMedia
+      ? buildMediaImpactPrompt(idea, input, medium, format)
+      : buildImpactPrompt(idea, input, genre, subgenre);
     const { text } = await streamMessage({
       provider: mode, model, system,
       messages: [{ role: "user", content: user }],
       temperature: 0.6, maxTokens: 2200,
     });
     const impact = parseImpact(text);
-    if (!impact) return sendJson(res, 200, { ok: true, fallback: true, impact: localImpact(idea, input, genre, subgenre), note: "파싱 실패로 폴백" });
+    if (!impact) return sendJson(res, 200, { ok: true, fallback: true, impact: localFb(), note: "파싱 실패로 폴백" });
     return sendJson(res, 200, { ok: true, impact });
   } catch (err) {
-    return sendJson(res, 200, { ok: true, fallback: true, impact: localImpact(idea, input, genre, subgenre), note: err?.message });
+    return sendJson(res, 200, { ok: true, fallback: true, impact: localFb(), note: err?.message });
   }
+}
+
+// 매체 산출물 자가비평: 한 산출물(특히 ★연출 설계)을 성공방정식·연출 기준으로 채점. SSE 아님.
+async function handleMediaCritique(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const format = payload.format || input.format || "medium";
+  const targetName = String(payload.targetName || "산출물");
+  const text = String(payload.text || "");
+  const model = payload.model || config.defaultModel;
+  if (!text.trim()) return sendJson(res, 400, { ok: false, error: "평가할 산출물이 없습니다." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, critique: localMediaCritique(input, medium, format, text) });
+  }
+  try {
+    const { system, user } = buildMediaCritiquePrompt({ input, medium, format, targetName, text });
+    const { text: out } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.4, maxTokens: 1500,
+    });
+    const critique = parseMediaCritique(out);
+    if (!critique) return sendJson(res, 200, { ok: true, critique: localMediaCritique(input, medium, format, text), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, critique });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, critique: localMediaCritique(input, medium, format, text), note: err?.message });
+  }
+}
+
+// 매체 완성도 심사: 전체 산출물 발췌를 매체 루브릭으로 채점. SSE 아님.
+async function handleMediaAudit(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const format = payload.format || input.format || "medium";
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+  if (!digest.trim()) return sendJson(res, 400, { ok: false, error: "심사할 산출물이 없습니다." });
+
+  const mode = resolveMode();
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest) });
+  }
+  try {
+    const { system, user } = buildMediaAuditPrompt({ input, medium, format, digest });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.45, maxTokens: 2600,
+    });
+    const audit = parseAudit(text); // 같은 스키마(dimensions/fatalWeaknesses/...) 재사용
+    if (!audit) return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest), note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, audit });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest), note: err?.message });
+  }
+}
+
+// 흥행 보증서: 전체 산출물 발췌를 매체 승리 조건으로 채점·증명. SSE 아님.
+async function handleMediaGuarantee(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const format = payload.format || input.format || "medium";
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+  if (!digest.trim()) return sendJson(res, 400, { ok: false, error: "보증할 산출물이 없습니다." });
+
+  const mode = resolveMode();
+  // 결정론 보증 점수는 항상 함께 싣는다(투명성).
+  const signal = scoreGuarantee(digest, medium);
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, guarantee: localGuarantee(input, medium, format, digest), signal });
+  }
+  try {
+    const { system, user } = buildGuaranteePrompt({ input, medium, format, digest });
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.4, maxTokens: 2600,
+    });
+    const guarantee = parseGuarantee(text, medium);
+    if (!guarantee) return sendJson(res, 200, { ok: true, guarantee: localGuarantee(input, medium, format, digest), signal, note: "파싱 실패로 폴백" });
+    return sendJson(res, 200, { ok: true, guarantee, signal });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, guarantee: localGuarantee(input, medium, format, digest), signal, note: err?.message });
+  }
+}
+
+// 약한 입력 → 흥행급 북극성 브리프 업그레이드. SSE 아님(짧음).
+async function handleMediaUpgrade(req, res) {
+  const payload = await readJson(req);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const format = payload.format || input.format || "medium";
+  const model = payload.model || config.defaultModel;
+
+  const mode = resolveMode();
+  const localBrief = () => `## 흥행급 한 줄\n- ${String(input.logline || input.ipTitle || "이 아이디어").trim()} — 승리 조건을 모두 갖춘 버전.\n\n> (로컬 폴백. 키/구독 연결 시 실제 업그레이드 브리프가 생성됩니다.)`;
+  if (mode === "local") {
+    return sendJson(res, 200, { ok: true, fallback: true, brief: localBrief() });
+  }
+  try {
+    const { system, user } = buildUpgradeBrief(input, medium, format);
+    const { text } = await streamMessage({
+      provider: mode, model, system,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.7, maxTokens: 1600,
+    });
+    const brief = (text || "").trim() || localBrief();
+    return sendJson(res, 200, { ok: true, brief });
+  } catch (err) {
+    return sendJson(res, 200, { ok: true, fallback: true, brief: localBrief(), note: err?.message });
+  }
+}
+
+// 크로스미디어 변환: 현재 IP를 다른 매체로 재기획. SSE 스트리밍.
+async function handleConvert(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const fromMedium = payload.fromMedium || input.medium || "webnovel";
+  const toMedium = payload.toMedium || "film";
+  const format = payload.format || input.format || "medium";
+  const digest = String(payload.digest || "");
+  const model = payload.model || config.defaultModel;
+
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") {
+    const s = localConvert({ input, fromMedium, toMedium, format });
+    emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return;
+  }
+  try {
+    const { system, user } = buildConvertPrompt({ input, fromMedium, toMedium, format, digest });
+    let acc = "";
+    const { text } = await streamMessage({
+      provider, model, system, signal,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.7, maxTokens: 3000,
+      onText: (chunk) => { acc += chunk; emit("delta", { text: chunk }); },
+    });
+    const full = (text || acc).trim() || localConvert({ input, fromMedium, toMedium, format });
+    emit("done", { ok: true, result: full });
+  } catch (err) {
+    if (err?.name !== "AbortError") { const s = localConvert({ input, fromMedium, toMedium, format }); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); }
+  } finally { res.end(); }
 }
 
 // 연재 메모리: 한 회차 원고 → 구조화 요약(JSON). 다음 회차의 연속성 컨텍스트로 누적된다. SSE 아님.
@@ -477,6 +662,9 @@ async function handleIdeate(req, res) {
   // mode==='complete': 작가가 채운 항목은 유지하고 '빈 칸만' AI로 보강.
   const complete = payload.mode === "complete";
   const input = payload.input || {};
+  // 매체(전용 파이프라인)일 때 기획을 그 매체 문법으로 채운다.
+  const medium = payload.medium || input.medium || "webnovel";
+  const format = payload.format || input.format || "medium";
 
   if (complete) {
     const hasAny = FIELD_KEYS.some((k) => String(input[k] ?? "").trim());
@@ -492,8 +680,8 @@ async function handleIdeate(req, res) {
   }
   try {
     const { system, user } = complete
-      ? buildCompletePrompt(input, genre, subgenre, blendGenres)
-      : buildIdeatePrompt(idea, genre, subgenre, blendGenres);
+      ? buildCompletePrompt(input, genre, subgenre, blendGenres, medium, format)
+      : buildIdeatePrompt(idea, genre, subgenre, blendGenres, medium, format);
     const { text } = await streamMessage({
       provider: mode, // 'api' | 'cli'
       model,
@@ -713,6 +901,26 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/audit") {
     return handleAudit(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/media-critique") {
+    return handleMediaCritique(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/media-audit") {
+    return handleMediaAudit(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/media-guarantee") {
+    return handleMediaGuarantee(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/media-upgrade") {
+    return handleMediaUpgrade(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/convert") {
+    return handleConvert(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/run") {
