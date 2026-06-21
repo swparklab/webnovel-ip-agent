@@ -46,6 +46,7 @@ const {
 const {
   buildVisualContePrompt, localVisualConte, isVisual: isVisualMedium, AI_VIDEO_MODELS,
 } = require("./lib/aianimation");
+const { buildArtStylePrompt, localArtStyle } = require("./lib/artstyle");
 const {
   buildGuaranteePrompt, parseGuarantee, localGuarantee,
   buildUpgradeBrief, scoreGuarantee,
@@ -545,6 +546,25 @@ async function handleMediaAudit(req, res) {
   } catch (err) {
     return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest), note: err?.message });
   }
+}
+
+// 그림풍 추천: 작품에 알맞은 A/B/C 화풍 + 스타일별 생성 프롬프트(키비주얼·캐릭터·장면). SSE.
+async function handleArtStyle(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const oneSheet = payload.oneSheet || input.oneSheet || null;
+  const format = payload.format || input.format || "medium";
+  const targetModel = payload.targetModel || input.videoModel || "kling";
+  const model = payload.model || config.defaultModel;
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") { const s = localArtStyle({ input, oneSheet, format, targetModel }); emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return; }
+  try {
+    const { system, user } = buildArtStylePrompt({ input, oneSheet, format, targetModel });
+    let acc = "";
+    const { text } = await streamMessage({ provider, model, system, signal, messages: [{ role: "user", content: user }], temperature: 0.7, maxTokens: 4000, onText: (c) => { acc += c; emit("delta", { text: c }); } });
+    emit("done", { ok: true, result: (text || acc).trim() || localArtStyle({ input, oneSheet, format, targetModel }) });
+  } catch (err) { if (err?.name !== "AbortError") { const s = localArtStyle({ input, oneSheet, format, targetModel }); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); } } finally { res.end(); }
 }
 
 // Tech-to-Story Mapper: AI 제약 → 서사 장치, AI 강점 → 메타포. JSON.
@@ -1106,6 +1126,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/media-audit") {
     return handleMediaAudit(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/artstyle") {
+    return handleArtStyle(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/techmap") {

@@ -1,0 +1,654 @@
+[
+ {
+  "key": "charcoalLimitedAnime",
+  "label": "차콜 흑백 2.5D 제한 애니",
+  "family": "monochrome",
+  "fitThemes": [
+   "기억",
+   "상실",
+   "노년",
+   "고독",
+   "애도",
+   "치매",
+   "사별",
+   "전쟁의 잔상"
+  ],
+  "whyFit": "번지는 목탄의 입자와 손으로 문지른 얼룩이 '지워지는 기억'의 은유로 직결돼 심사위원의 정서적 공감을 즉발한다.",
+  "promptCore": "hand-drawn charcoal animation, smudged compressed-charcoal on toothy paper, deep matte blacks with soft grey midtones, visible eraser ghosting and fingerprint smears, limited 2.5D parallax layers, on-twos 12fps stutter, paper grain and faint vignette, chiaroscuro lighting, restrained desaturated monochrome, 16mm-like flicker",
+  "shortTag": "charcoal, smudged, monochrome, on-twos, paper grain, chiaroscuro, limited animation",
+  "avoid": [
+   "매끈한 3D CG 렌더",
+   "과채도 색감",
+   "애니풍 큰 눈 캐릭터",
+   "화면 내 자막/텍스트",
+   "깔끔한 벡터 라인",
+   "플라스틱 셀셰이딩"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "sumiInkWash",
+  "label": "수묵 발묵 동양 수묵 애니",
+  "family": "painterly",
+  "fitThemes": [
+   "자연",
+   "무상",
+   "이별",
+   "고향",
+   "민속",
+   "명상",
+   "계절의 순환",
+   "죽음과 환생"
+  ],
+  "whyFit": "먹의 번짐(발묵)과 여백 자체가 '비움과 흐름'의 동양적 사유를 담아 서구 영화제에서 문화적 변별력으로 작동한다.",
+  "promptCore": "East Asian sumi-e ink wash animation, bleeding wet-on-wet black ink on rice paper, generous negative space, calligraphic single-stroke gestures, soft grey gradients from diluted ink, subtle bleed and feathering at edges, minimal accents, breathing pauses between motions, organic flow, antique paper texture",
+  "shortTag": "sumi-e, ink wash, wet-on-wet, negative space, calligraphic, rice paper",
+  "avoid": [
+   "두꺼운 외곽선 고정",
+   "디지털 그라데이션 밴딩",
+   "꽉 찬 배경",
+   "비비드 컬러",
+   "애니메 표정 과장",
+   "CG 물 시뮬레이션 느낌"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "penCrosshatchEtching",
+  "label": "펜화 해칭 동판화풍 라인 애니",
+  "family": "monochrome",
+  "fitThemes": [
+   "호러",
+   "민속",
+   "불안",
+   "강박",
+   "고딕",
+   "악몽",
+   "기계와 인간",
+   "디스토피아"
+  ],
+  "whyFit": "촘촘한 해칭선의 떨림과 잉크 긁힘이 신경증적 긴장을 시각화해 다크 판타지·호러 단편에서 강한 작가성을 준다.",
+  "promptCore": "pen-and-ink crosshatch animation, dense ink hatching and stippling, etching/engraving line texture, scratchy nib wobble, high-contrast black ink on cream paper, woodcut-like negative shapes, boiling lines on-ones, fine drypoint scratches, antique illustration plate feel, no fill flats only line density shading",
+  "shortTag": "pen-and-ink, crosshatch, etching, stippling, boiling lines, woodcut, high-contrast",
+  "avoid": [
+   "부드러운 에어브러시 음영",
+   "컬러 채색",
+   "매끈한 안티앨리어싱",
+   "둥글둥글한 귀여운 디자인",
+   "3D 깊이감 과다",
+   "글자/타이포 삽입"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "runway"
+ },
+ {
+  "key": "rotoscopeGraphitePencil",
+  "label": "로토스코프 연필 드로잉 애니",
+  "family": "monochrome",
+  "fitThemes": [
+   "치유",
+   "트라우마",
+   "청춘",
+   "고독",
+   "정체성",
+   "꿈과 현실",
+   "중독",
+   "회복"
+  ],
+  "whyFit": "실사 위 손연필 떨림이 인물의 미세한 감정과 신체성을 살려 '진짜 사람의 호흡'을 전하는 휴먼 드라마에 최적이다.",
+  "promptCore": "rotoscoped graphite pencil animation, traced live-action movement, loose 2H-6B pencil linework with visible search lines, hand-shaded graphite hatching, subtle frame-to-frame line jitter, off-white sketchbook paper, smudge and eraser texture, naturalistic human gesture, muted graphite greys, on-twos",
+  "shortTag": "rotoscope, graphite pencil, search lines, hand-shaded, sketchbook, line jitter",
+  "avoid": [
+   "완벽히 깔끔한 라인",
+   "컬러 플랫",
+   "CG 모션 보간 매끄러움",
+   "과장된 애니 포즈",
+   "비비드 배경",
+   "렌즈 플레어"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "runway"
+ },
+ {
+  "key": "woodcutLinocut",
+  "label": "목판화 리노컷 흑백 판화 애니",
+  "family": "craft",
+  "fitThemes": [
+   "민중",
+   "전설",
+   "노동",
+   "혁명",
+   "민속신화",
+   "우화",
+   "토속 공포",
+   "계급"
+  ],
+  "whyFit": "칼자국의 거친 양각·음각이 토속적 힘과 우화적 무게를 실어 사회적·신화적 주제에 묵직한 조형미를 부여한다.",
+  "promptCore": "woodcut/linocut print animation, bold carved black-and-white shapes, gouged white knife-marks through solid black, rough relief print texture, ink-roller unevenness, registration imperfection, expressive German Expressionist contrast, grainy paper press texture, chunky positive-negative forms, hand-stamped feel",
+  "shortTag": "woodcut, linocut, relief print, carved marks, expressionist, high-contrast, ink-roller",
+  "avoid": [
+   "섬세한 그라데이션",
+   "디지털 매끈함",
+   "컬러풀 팔레트",
+   "얇고 정교한 선만",
+   "사실적 음영",
+   "3D 입체 조명"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "seedance"
+ },
+ {
+  "key": "camcorderNoiseSketch",
+  "label": "캠코더 노이즈 + 거친 스케치 합성 로파이",
+  "family": "lofi",
+  "fitThemes": [
+   "향수",
+   "기억의 왜곡",
+   "유년",
+   "상실",
+   "아날로그 노스탤지어",
+   "유령",
+   "사라짐",
+   "고독"
+  ],
+  "whyFit": "VHS 노이즈와 손스케치의 결합이 '기록되었으나 바래는 기억'을 촉각적으로 구현해 노스탤지어 단편의 정서를 증폭한다.",
+  "promptCore": "lo-fi camcorder VHS aesthetic over rough hand sketch, analog tape noise and tracking glitches, chromatic-free monochrome with scanlines, dropout flicker, grainy interlaced texture, hand-drawn pencil sketch composited under tape artifacts, date-stamp era home-video grain, soft blur and signal warble, faded blacks",
+  "shortTag": "VHS, camcorder noise, tracking glitch, scanlines, hand sketch, lo-fi, analog grain",
+  "avoid": [
+   "선명한 4K 클린 이미지",
+   "디지털 컬러 그레이딩 과다",
+   "매끈 CG",
+   "화면 내 텍스트 자막",
+   "현대적 UI 요소",
+   "과한 채도"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "seedance"
+ },
+ {
+  "key": "wetWatercolorMemory",
+  "label": "젖은 수채 번짐 기억화 (Wet-on-Wet Watercolor)",
+  "family": "painterly",
+  "fitThemes": [
+   "기억",
+   "상실",
+   "노년",
+   "치매·기억소실",
+   "고독",
+   "이별",
+   "유년 회상",
+   "물·비·눈물 정서"
+  ],
+  "whyFit": "물감이 번지며 형태가 스스로 풀어지는 성질이 '기억의 흐려짐·상실'을 직접 은유해 심사위원에게 즉각 정서로 읽힌다",
+  "promptCore": "wet-on-wet watercolor animation, soft bleeding pigment edges, granulating washes on cold-press cotton paper, muted desaturated palette of payne's grey, faded indigo and dusty rose, blooms and backruns where color dissolves, visible paper grain and water tide-lines, hand-painted frame-to-frame boil, diffuse window light, melancholic and quiet, 4:3 intimate framing, subtle film grain",
+  "shortTag": "wet-on-wet watercolor, bleeding edges, paper grain, muted indigo, painterly boil",
+  "avoid": [
+   "매끈한 3D CG 렌더",
+   "과채도·네온",
+   "애니풍 큰 눈 캐릭터",
+   "선명한 벡터 외곽선",
+   "화면 내 텍스트·자막",
+   "플라스틱 하이라이트"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "thickImpastoOil",
+  "label": "두꺼운 임파스토 유화 (Impasto Oil)",
+  "family": "painterly",
+  "fitThemes": [
+   "격정·내면의 동요",
+   "트라우마",
+   "분노와 슬픔",
+   "정신적 붕괴",
+   "고흐적 고독",
+   "노동·삶의 무게",
+   "정념"
+  ],
+  "whyFit": "붓자국 덩어리가 살아 움직이는 질감이 인물의 감정 동요를 물질로 보여줘 강렬한 작가주의 인상을 남긴다",
+  "promptCore": "thick impasto oil painting animation, heavy palette-knife strokes with raised ridges catching light, visible brush texture swirling like Van Gogh, rich saturated-but-earthy palette of ochre, prussian blue and burnt sienna, painterly motion where strokes shift between frames, canvas weave texture, dramatic chiaroscuro, emotional turbulence, 35mm grain, cinematic shallow depth",
+  "shortTag": "impasto oil, palette-knife ridges, swirling brushwork, canvas weave, chiaroscuro",
+  "avoid": [
+   "깨끗한 디지털 셀 채색",
+   "균일한 평면 색면",
+   "매끈 CG 피부",
+   "큰 눈 모에 캐릭터",
+   "과도한 블룸·렌즈플레어",
+   "화면 내 텍스트"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "runway"
+ },
+ {
+  "key": "inkWashSumi",
+  "label": "수묵·여백 동양화 (Sumi-e Ink Wash)",
+  "family": "painterly",
+  "fitThemes": [
+   "무상·덧없음",
+   "자연·산수",
+   "선·명상",
+   "죽음과 윤회",
+   "노스탤지어",
+   "동양 민속·설화",
+   "고요한 슬픔"
+  ],
+  "whyFit": "여백(餘白)과 번지는 먹의 농담이 '비움·부재·여운'을 담아 명상적 작가영화로 깊게 읽힌다",
+  "promptCore": "east-asian sumi-e ink wash animation, monochrome black ink on rice paper, gradated tonal washes from deep black to pale grey, expressive single-stroke brushwork, vast negative space and ma emptiness, ink bleeding and feathering into fibrous paper, occasional single vermilion seal accent, calligraphic line, mist and atmosphere, contemplative slow pace, hand-scroll composition",
+  "shortTag": "sumi-e ink wash, monochrome ink, negative space, rice paper bleed, calligraphic stroke",
+  "avoid": [
+   "풀컬러 과채도",
+   "두꺼운 3D 셰이딩",
+   "서구 만화풍 라인",
+   "복잡한 배경 디테일 과밀",
+   "매끈 CG",
+   "화면 내 자막"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "softPastelStorybook",
+  "label": "파스텔 동화 스토리북 (Soft Pastel Storybook)",
+  "family": "painterly",
+  "fitThemes": [
+   "동화·우화",
+   "치유·위로",
+   "따뜻함",
+   "어린 시절",
+   "유대·돌봄",
+   "상실 후 회복",
+   "잔잔한 환상"
+  ],
+  "whyFit": "분필 파스텔의 부드러운 입자감이 보호적·치유적 정서를 만들어 휴머니즘 주제에서 관객 공감을 끌어낸다",
+  "promptCore": "soft chalk pastel storybook animation, velvety powdery texture, gentle hand-smudged gradients, warm tender palette of peach, sage, cream and soft lavender, rounded organic shapes, toothy pastel paper grain, diffuse golden hour glow, picture-book intimacy, slight grain boil, hand-illustrated warmth, dreamlike soft focus edges",
+  "shortTag": "chalk pastel, powdery texture, warm palette, paper tooth, soft storybook glow",
+  "avoid": [
+   "하이콘트라스트 어두운 톤",
+   "날카로운 벡터 라인",
+   "매끈 3D 플라스틱",
+   "과채도 네온",
+   "공포·고어 요소",
+   "화면 내 텍스트"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "seedance"
+ },
+ {
+  "key": "gouacheFolkHorror",
+  "label": "과슈 민속 호러 (Matte Gouache Folk-Horror)",
+  "family": "painterly",
+  "fitThemes": [
+   "민속·전설",
+   "포크호러",
+   "불안·불길함",
+   "주술·제의",
+   "마술적 리얼리즘",
+   "토속 신화",
+   "기묘한 시골"
+  ],
+  "whyFit": "과슈의 불투명 무광 색면이 평면적 제의 도상 같은 불길함을 만들어 마술적 리얼리즘 호러의 긴장을 살린다",
+  "promptCore": "matte gouache folk-horror animation, flat opaque poster-like color fields, slightly chalky uneven coverage with visible brush dabs, ominous muted palette of moss green, dried-blood maroon, bone white and dim ochre, stylized folk-art iconography, hand-painted texture with cardboard grain, eerie flat lighting, unsettling stillness, woodcut-adjacent shapes, ritual atmosphere",
+  "shortTag": "matte gouache, flat opaque fields, folk-art iconography, muted ominous palette, ritual mood",
+  "avoid": [
+   "광택 3D CG",
+   "사실적 글로우·블룸",
+   "귀여운 모에 캐릭터",
+   "과채도 파스텔",
+   "사진실사 텍스처",
+   "화면 내 자막"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "runway"
+ },
+ {
+  "key": "pleinAirImpressionist",
+  "label": "외광 인상주의 (Plein-Air Impressionist)",
+  "family": "painterly",
+  "fitThemes": [
+   "순간의 빛·노스탤지어",
+   "여름·유년의 기억",
+   "덧없는 행복",
+   "흘러가는 시간",
+   "사랑·재회",
+   "산책·풍경 정서"
+  ],
+  "whyFit": "흩어진 붓터치로 포착한 찰나의 빛이 '돌아오지 않는 순간'의 애틋함을 만들어 서정적 회상 서사에 강하다",
+  "promptCore": "plein-air impressionist painting animation, broken color dabs and visible directional brushstrokes, shimmering dappled sunlight, vibrant-yet-natural palette of warm yellows, lilac shadows and viridian, atmospheric haze, Monet-Sorolla light, soft edges dissolving in air, flickering painterly boil suggesting wind, nostalgic golden warmth, loose unfinished edges, canvas texture",
+  "shortTag": "impressionist broken color, dappled light, visible brushstrokes, atmospheric haze, nostalgic glow",
+  "avoid": [
+   "선명한 윤곽선 셀화",
+   "매끈 CG 렌더",
+   "차갑고 평면적 디지털 색",
+   "큰 눈 애니 캐릭터",
+   "과도한 디테일 묘사",
+   "화면 내 텍스트"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "kling"
+ },
+ {
+  "key": "needleFeltDiorama",
+  "label": "니들펠트 인형 스톱모션 (양모 펠트 디오라마)",
+  "family": "craft",
+  "fitThemes": [
+   "치유",
+   "따뜻함",
+   "동화",
+   "유년의 기억",
+   "상실 후 위로",
+   "노년",
+   "가족",
+   "겨울/포근함"
+  ],
+  "whyFit": "보풀 섬유의 부드러운 산란광이 감정을 '품어주는' 질감을 만들어 상실·치유 서사를 과하지 않게 울리게 한다.",
+  "promptCore": "stop-motion needle-felted wool puppets, soft fuzzy fiber texture with visible felting strands, handmade diorama set, warm tungsten practical lights, shallow macro depth of field, gentle muted earth palette of oatmeal cream moss-green dusty rose, subtle stop-motion strobing, tactile miniature scale, cozy storybook mood, 35mm film grain, slight handmade imperfection",
+  "shortTag": "needle-felted wool, stop-motion, macro diorama, warm tungsten, muted earth tones, fuzzy fiber",
+  "avoid": [
+   "매끈한 플라스틱 CG",
+   "과채도 형광색",
+   "애니풍 큰 눈",
+   "화면 내 텍스트",
+   "완벽한 매끄러운 표면",
+   "차가운 하이키 조명"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "claymationGrotesque",
+  "label": "클레이메이션 (점토 손자국 그로테스크)",
+  "family": "craft",
+  "fitThemes": [
+   "불안",
+   "변신/형태붕괴",
+   "민속 호러",
+   "내면의 균열",
+   "유머러스한 비극",
+   "신체성",
+   "꿈/악몽"
+  ],
+  "whyFit": "지문과 균열이 남은 점토 표면이 AI의 형태 붕괴를 손맛 있는 신체 변형 은유로 승화시켜 마술적 리얼리즘에 강하다.",
+  "promptCore": "claymation stop-motion, plasticine clay characters with visible fingerprints thumbprints and tool marks, slightly uneven sculpted surfaces, malleable morphing forms, matte clay sheen, moody chiaroscuro practical lighting, desaturated ochre and bruised purple palette, organic imperfect armature, handcrafted set, 16mm film grain, eerie tactile uncanny mood",
+  "shortTag": "plasticine claymation, fingerprint texture, morphing forms, chiaroscuro, matte clay, 16mm grain",
+  "avoid": [
+   "매끈한 CG 렌더",
+   "반들거리는 광택 셰이더",
+   "과채도",
+   "애니풍 큰 눈",
+   "화면 내 텍스트",
+   "완벽 대칭 표면"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "paperCutoutLayered",
+  "label": "종이 컷아웃 다층 스톱모션 (레이어드 페이퍼)",
+  "family": "craft",
+  "fitThemes": [
+   "기억",
+   "그림자/이중성",
+   "우화",
+   "이별",
+   "여행/떠남",
+   "고독",
+   "역사적 회상",
+   "동화"
+  ],
+  "whyFit": "겹쳐진 종이 층의 그림자와 가장자리가 기억의 '레이어'를 시각화해 회상·우화 서사에 시적 거리를 만든다.",
+  "promptCore": "layered paper cutout stop-motion, hand-cut textured construction paper with visible torn fibrous edges, multiplane depth with soft drop shadows between layers, backlit translucent vellum, limited screen-print palette of indigo ochre and bone-white, slight paper curl and imperfection, theatrical flat-perspective staging, gentle grain, lyrical fable mood",
+  "shortTag": "layered paper cutout, torn edges, multiplane shadows, screen-print palette, backlit vellum",
+  "avoid": [
+   "3D 입체 렌더 광택",
+   "과채도 그라데이션",
+   "애니풍 큰 눈",
+   "화면 내 텍스트",
+   "사진같은 사실 질감",
+   "매끈 벡터 깔끔함"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "runway"
+ },
+ {
+  "key": "embroideryThreadworld",
+  "label": "자수·실 텍스타일 애니 (스티치 무빙)",
+  "family": "craft",
+  "fitThemes": [
+   "기억의 봉합",
+   "치유",
+   "여성 서사/가사노동",
+   "전통/계승",
+   "상처와 흉터",
+   "느린 시간",
+   "향수"
+  ],
+  "whyFit": "한 땀씩 놓인 실의 시간성이 '꿰매어 잇는' 치유와 계승의 메타포로 작동해 느린 정서극에 깊이를 준다.",
+  "promptCore": "embroidered textile animation, stitched thread characters on woven linen ground, visible cross-stitch and satin-stitch texture, frayed thread ends, raised tactile relief, soft diffused daylight, faded folk palette of madder-red indigo and undyed flax, gentle cloth weave grain, slow handmade craft mood, macro fabric detail, slight stop-motion flicker",
+  "shortTag": "embroidered thread, woven linen, satin-stitch texture, faded folk palette, tactile relief",
+  "avoid": [
+   "매끈 CG",
+   "과채도",
+   "애니풍 큰 눈",
+   "화면 내 텍스트",
+   "디지털 깔끔 벡터",
+   "반짝이는 메탈 광택"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "kling"
+ },
+ {
+  "key": "puppetWoodMarionette",
+  "label": "목각 인형·마리오네트 스톱모션 (낡은 무대)",
+  "family": "craft",
+  "fitThemes": [
+   "운명/통제",
+   "민속",
+   "고독한 장인",
+   "전쟁의 그림자",
+   "노스탤지어",
+   "동유럽 우화",
+   "죽음의 의인화"
+  ],
+  "whyFit": "관절과 줄이 보이는 낡은 목각 인형이 '조종당하는 존재'의 실존적 무게를 담아 어두운 우화에 압도적이다.",
+  "promptCore": "wooden puppet marionette stop-motion, hand-carved aged wood with chipped paint and visible grain, articulated joints and faint control strings, dusty theatrical miniature stage, low-key candlelit practical lighting, somber sepia and ash-grey palette, weathered patina, Eastern-European fable atmosphere, 16mm grain, melancholic uncanny mood",
+  "shortTag": "carved wood marionette, chipped paint, visible strings, candlelit stage, sepia ash palette, weathered",
+  "avoid": [
+   "매끈 CG",
+   "광택 플라스틱",
+   "과채도",
+   "애니풍 큰 눈",
+   "화면 내 텍스트",
+   "밝은 팝 컬러"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "mixedFoundObject",
+  "label": "오브제·믹스드미디어 정크 스톱모션 (재활용 콜라주)",
+  "family": "craft",
+  "fitThemes": [
+   "환경/소외",
+   "버려짐",
+   "도시 고독",
+   "재생/부활",
+   "기계와 인간",
+   "디스토피아 속 온기",
+   "기억의 잔해"
+  ],
+  "whyFit": "버려진 사물로 생명을 빚는 손길이 소외·재생 주제와 직결돼 사회적 메시지와 촉각미를 동시에 잡는다.",
+  "promptCore": "mixed-media found-object stop-motion, characters assembled from rust metal scraps wire cloth and broken trinkets, gritty patina and corrosion texture, junkyard miniature set, harsh raking sidelight with deep shadows, desaturated industrial palette of rust steel-grey and tarnished brass, tactile assemblage detail, 16mm grain, poetic post-industrial melancholy",
+  "shortTag": "found-object assemblage, rust and wire, corrosion patina, raking sidelight, industrial desaturated",
+  "avoid": [
+   "매끈 CG",
+   "깨끗한 렌더",
+   "과채도",
+   "애니풍 큰 눈",
+   "화면 내 텍스트",
+   "광택 표면"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "runway"
+ },
+ {
+  "key": "vhsCamcorderDecay",
+  "label": "90s 캠코더·VHS 자기테이프 부패 룩",
+  "family": "lofi",
+  "fitThemes": [
+   "기억",
+   "상실",
+   "유년의 향수",
+   "사라지는 것",
+   "가족 아카이브",
+   "유령·부재",
+   "트라우마의 재생",
+   "시간의 마모"
+  ],
+  "whyFit": "테이프 드롭아웃과 트래킹 에러 자체가 '훼손된 기억'의 시각 은유라 인간적 주제와 1:1로 붙는다.",
+  "promptCore": "degraded 1990s Hi8/VHS home-video footage, heavy chroma bleed and color smearing, horizontal tracking noise bands, magnetic dropout flecks, timestamp burn-in only as texture not legible text, soft analog blur, blown-out window highlights, dim CRT interlacing, dust and tape warble, washed teal-and-amber palette, handheld micro-jitter, intimate domestic interiors, grain-heavy low resolution",
+  "shortTag": "VHS, Hi8, tracking-noise, chroma-bleed, analog-decay, interlaced, home-video",
+  "avoid": [
+   "매끈한 4K CG",
+   "선명한 디지털 샤프닝",
+   "과채도 네온",
+   "화면 내 읽히는 자막·타임스탬프 텍스트",
+   "애니풍 큰 눈 캐릭터",
+   "깨끗한 안정화 카메라"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "kling"
+ },
+ {
+  "key": "datamoshGlitchDissolve",
+  "label": "데이터모시·글리치 형태 붕괴",
+  "family": "digital",
+  "fitThemes": [
+   "정체성 해체",
+   "디지털 슬픔",
+   "AI 자아 붕괴",
+   "비현실·꿈",
+   "이별의 번짐",
+   "마술적 리얼리즘 변신",
+   "기억의 오류"
+  ],
+  "whyFit": "프레임이 서로 녹아드는 데이터모시는 AI의 형태 붕괴를 결함이 아닌 '의도된 변신 은유'로 승화시킨다.",
+  "promptCore": "datamosh aesthetic, I-frame removal smearing, pixel-block motion compensation bleeding between scenes, melting morph transitions, compression artifacts as expressive texture, smeared trailing motion, glitch displacement, RGB channel shift, codec error blooms, dreamlike dissolving forms, bruised purple and sickly green palette, lo-fi datamoshed video collage",
+  "shortTag": "datamosh, pixel-bleed, codec-error, morph-smear, glitch-art, motion-vector",
+  "avoid": [
+   "깔끔한 컷 전환",
+   "안정적 형태 유지",
+   "포토리얼 피부 디테일",
+   "상업 광고풍 광택",
+   "정직한 모션블러"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "runway"
+ },
+ {
+  "key": "ditheredPixelLowbit",
+  "label": "디더드 로비트 픽셀·1비트 점묘",
+  "family": "lofi",
+  "fitThemes": [
+   "고독",
+   "디지털 멜랑콜리",
+   "노스탤지어 게임기 세대",
+   "소외",
+   "밤·불면",
+   "작은 위로",
+   "기계 속의 인간성"
+  ],
+  "whyFit": "제한된 팔레트와 디더링 노이즈가 절제된 감정을 만들어 미니멀한 고독·치유 서사에 강하다.",
+  "promptCore": "1-bit and limited-palette dithered pixel art, Bayer ordered dithering, chunky aliased edges, Game Boy and early Macintosh monochrome influence, low resolution upscaled with hard nearest-neighbor pixels, CRT scanline overlay, restrained 3-4 color ramp, melancholic muted tones, grainy stipple shading, quiet minimalist composition, retro handheld nostalgia",
+  "shortTag": "1-bit, dithered, pixel-art, Bayer, limited-palette, CRT-scanline, nearest-neighbor",
+  "avoid": [
+   "부드러운 안티앨리어싱 그라데이션",
+   "수백만 컬러",
+   "사실적 라이팅",
+   "고해상 디테일",
+   "현대 3D 셰이딩"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "seedance"
+ },
+ {
+  "key": "xeroxRisoZine",
+  "label": "복사기·리소그래프 진(zine) 콜라주",
+  "family": "lofi",
+  "fitThemes": [
+   "저항·청춘",
+   "도시 소외",
+   "펑크적 분노",
+   "사회 비판",
+   "민속·구전",
+   "거친 따뜻함",
+   "수공예적 친밀감"
+  ],
+  "whyFit": "복사기 토너 뭉침과 리소 미스레지스터의 손맛이 '사람 손이 닿은' 진정성으로 심사위원의 정서를 건드린다.",
+  "promptCore": "photocopier and risograph zine aesthetic, high-contrast halftone dot screens, toner smudges and streaks, off-register spot-color overprint in fluorescent pink and blue, paper texture and fold creases, cut-and-paste collage edges, xerox degradation, grainy lithographic ink, handmade punk fanzine feel, limited duotone palette",
+  "shortTag": "risograph, xerox, halftone, misregister, duotone, zine-collage, toner-smudge",
+  "avoid": [
+   "매끈한 벡터 그라데이션",
+   "포토리얼 질감",
+   "깨끗한 디지털 라인",
+   "풀컬러 사실 렌더",
+   "광택 CG"
+  ],
+  "festivalWeight": 5,
+  "bestModel": "runway"
+ },
+ {
+  "key": "flatCelGraphicNovel",
+  "label": "플랫 셀·제한 채색 그래픽노블",
+  "family": "lofi",
+  "fitThemes": [
+   "성장·통과의례",
+   "조용한 드라마",
+   "이민·정체성",
+   "세대 갈등",
+   "내면 독백",
+   "도시의 밤",
+   "절제된 슬픔"
+  ],
+  "whyFit": "거친 텍스처가 없어도 제한 팔레트와 굵은 윤곽선의 그래픽노블 톤이 문학적 무게와 작가성을 신호한다.",
+  "promptCore": "flat 2D cel animation meets graphic-novel ink, bold uneven hand-inked outlines, limited flat color fills, restrained desaturated palette with one accent color, visible brush and pen texture, subtle paper grain, deliberate negative space, minimal gradients, expressive shadow shapes, literary indie-comic mood, matte non-glossy surfaces",
+  "shortTag": "flat-cel, graphic-novel, hand-inked, limited-palette, matte, negative-space",
+  "avoid": [
+   "3D 입체 셰이딩",
+   "광택 하이라이트",
+   "과도한 디테일",
+   "사진 질감",
+   "애니풍 반짝이는 큰 눈"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "kling"
+ },
+ {
+  "key": "analogCRTPhosphor",
+  "label": "아날로그 CRT 인광·오실로스코프 발광",
+  "family": "experimental",
+  "fitThemes": [
+   "통신·교신",
+   "기계의 의식",
+   "고독한 SF",
+   "유령적 잔상",
+   "냉전 향수",
+   "신호 속의 목소리",
+   "기술과 죽음"
+  ],
+  "whyFit": "인광 잔상과 스캔라인 발광이 차갑지만 인간적인 '기계 안의 영혼' 정서를 만들어 실험 SF 단편에 강하다.",
+  "promptCore": "analog CRT phosphor glow, oscilloscope vector lines, green and amber monochrome cathode-ray luminance, scanline bloom and persistence trails, signal noise and rolling sync bars, dark vignette around curved glass screen, slow phosphor decay smear, retro terminal and radar aesthetic, eerie low-light hum, electron-beam flicker",
+  "shortTag": "CRT-phosphor, oscilloscope, scanline-bloom, persistence-trail, vector-glow, monochrome",
+  "avoid": [
+   "밝은 풀컬러",
+   "매끈한 LCD 선명함",
+   "현대적 UI 그래픽",
+   "포토리얼 외부 풍경",
+   "고채도 컬러"
+  ],
+  "festivalWeight": 4,
+  "bestModel": "seedance"
+ }
+]

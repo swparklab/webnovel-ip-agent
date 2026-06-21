@@ -376,3 +376,27 @@ test("㉕ 애니 영화제 수상 하네스: 애니는 항상 주입, 영화는 
   assert.equal(an.buildAiAnimFestivalBlock({ medium: "film" }), "", "영화 하네스가 모드 없이 주입됨");
   assert.ok(an.buildAiAnimFestivalBlock({ medium: "film", aiFilmMode: true }).includes("마술적 리얼리즘"), "영화 AI모드 하네스 미주입");
 });
+
+test("㉖ 그림풍 추천: 작품 정서에 맞춰 서로 다른 화풍 A/B/C + 스타일별 프롬프트 블록", () => {
+  const as = require("../lib/artstyle");
+  assert.ok(as.ART_STYLES.length >= 6, "그림풍 카탈로그 부족");
+  for (const s of as.ART_STYLES) {
+    assert.ok(s.key && s.label && s.promptCore && s.shortTag, `${s.key}: 필드 누락`);
+    assert.ok(Array.isArray(s.fitThemes) && s.fitThemes.length, `${s.key}: fitThemes 없음`);
+    assert.ok(Array.isArray(s.avoid) && s.avoid.length, `${s.key}: avoid 없음`);
+  }
+  // 추천은 3개, 가능한 한 서로 다른 화풍 군.
+  const recs = as.recommendStyles({ theme: "기억과 상실, 노년의 고독", tone: "잔잔", designSpec: { message: "상실" } }, { centralObject: "흑백사진" });
+  assert.equal(recs.length, 3, "추천 3개 아님");
+  const fams = new Set(recs.map((r) => r.family));
+  assert.ok(fams.size >= 2, "A/B/C 화풍 군이 다양하지 않음");
+  // 정서가 다르면 추천도 달라진다.
+  const horror = as.recommendStyles({ theme: "민속 호러, 불안, 악몽", genre: "호러" });
+  assert.notDeepEqual(recs.map((r) => r.key), horror.map((r) => r.key), "정서가 달라도 추천이 동일");
+  // 폴백 A/B/C 블록은 공통 베이스 + 스타일별 프롬프트 + --ar.
+  const lc = as.localArtStyle({ input: { ipTitle: "T", protagonist: "노인" }, oneSheet: { centralObject: "사진" }, format: "short", targetModel: "kling" });
+  assert.ok(lc.includes("# 0. 공통 베이스") && lc.includes("--ar 16:9") && lc.includes("짧은 스타일 태그") && /[ABC]안/.test(lc), "폴백 A/B/C 블록 누락");
+  // 빌더는 추천 3스타일을 system에 싣고 공통 베이스를 유지한다.
+  const bp = as.buildArtStylePrompt({ input: { ipTitle: "The Fading Line", protagonist: "사진작가" }, oneSheet: { centralObject: "흑백사진" }, format: "short", targetModel: "runway" });
+  assert.ok(bp.system.includes("공통 베이스") && bp.recommended.length === 3, "그림풍 빌더 비정상");
+});

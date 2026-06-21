@@ -2761,10 +2761,15 @@ function handleMediaAction(act) {
   if (act === "critique") return mediaCritiqueAction();
   if (act === "audit") return mediaAuditAction();
   if (act === "convert") return mediaConvertAction();
+  if (act === "artstyle") return mediaArtstyle();
   if (act === "techmap") return mediaTechmap();
   if (act === "festival") return mediaFestival();
   if (act === "videoprompt") return mediaVideoprompt();
   if (act === "formconvert") return mediaFormconvert();
+}
+
+async function mediaArtstyle() {
+  await mediaStream("/api/artstyle", { input: collectInput(), oneSheet: state.oneSheet, format: el("format").value, targetModel: (el("videoModel") && el("videoModel").value) || "kling", model: el("modelSelect").value }, "🎨 그림풍 추천 (A/B/C + 스타일별 프롬프트)");
 }
 
 /* ----------------------- 🎥 AI 영상 제작 도구 ----------------------- */
