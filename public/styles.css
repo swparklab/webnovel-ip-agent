@@ -580,3 +580,5 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .tk-next { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 12px; padding-top: 10px; border-top: 1px dashed rgba(127,127,127,.28); }
 .tk-chip { font-size: 12px; padding: 4px 10px; border-radius: 999px; border: 1px solid var(--accent, #0c7b63); color: var(--accent, #0c7b63); background: transparent; cursor: pointer; }
 .tk-chip:hover { background: rgba(12,123,99,.1); }
+.tk-copy { font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(127,127,127,.35); background: transparent; cursor: pointer; margin-left: auto; }
+.tk-copy:hover { background: rgba(127,127,127,.12); }

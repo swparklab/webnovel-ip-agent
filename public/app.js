@@ -263,8 +263,8 @@ function onMediumChange(applySteering = false) {
   applyFormatLabels(medium);
   applyMediumVisibility(medium);
   populateDirectorPresets(medium);
-  // 매체 작업대 버튼·AI 영상 모델 선택기는 웹소설이 아닌 전용 파이프라인에서만 노출.
-  if (el("mediaToolsBtn")) el("mediaToolsBtn").hidden = (medium === "webnovel");
+  // 작업대 버튼은 전 매체 노출(웹소설도 전용 도구팩 보유). AI 영상 모델 선택기는 시각 매체만.
+  if (el("mediaToolsBtn")) el("mediaToolsBtn").hidden = false;
   if (el("videoModelRow")) el("videoModelRow").hidden = (medium === "webnovel");
   // 상세 설계 요소 패널: 웹소설 외 매체에서 노출. 명시적 매체 변경이면 추천값 적용, 아니면 유지.
   const dsSection = el("designSpecSection");
@@ -2530,11 +2530,13 @@ async function runTool() {
 /* ----------------------- 🎬 매체 작업대 ----------------------- */
 
 function openMediaModal() {
-  if (state.studio !== "production" || currentMedium() === "webnovel") {
-    toast("매체(애니/영화/다큐/드라마/광고)를 먼저 선택하세요.", "warn"); return;
+  if (state.studio !== "production") {
+    toast("제작실에서 매체를 선택한 뒤 작업대를 여세요.", "warn"); return;
   }
   const medium = currentMedium();
   el("mediaModalTitle").textContent = `${MEDIUM_LABELS_KO[medium] || "매체"} 작업대`;
+  // 시각 매체 전용 'AI 영상' 행은 웹소설에서 숨긴다(그림풍·영상 프롬프트 등은 영상 매체용).
+  if (el("mediaAiFilm")) el("mediaAiFilm").hidden = (medium === "webnovel");
   el("mediaToolpack").innerHTML = `<span class="section-hint" style="margin:0">전문 도구팩 불러오는 중…</span>`;
   loadToolkit(medium); // 매체별 전문 도구팩 동적 렌더
   // 변환 대상에서 현재 매체는 비활성(같은 매체 변환 방지).
@@ -2589,7 +2591,7 @@ async function mediaStream(url, body, tag) {
         else if (type === "done") { acc = d.result || acc; if (typeof d.fallback !== "undefined") fallback = !!d.fallback; }
       }
     }
-    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span>${trustBadge(fallback)}</div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span>${trustBadge(fallback)}${copyBtn()}</div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
     return acc;
   } catch (err) {
     mediaResultEl().innerHTML = `<div class="impact-loading">실패: ${escapeHtml(err.message || "")}</div>`;
@@ -2794,6 +2796,13 @@ function trustBadge(fallback) {
     ? `<span class="tk-trust tk-trust-local" title="API 키/구독 연결 시 실제 AI가 생성합니다">로컬 데모</span>`
     : `<span class="tk-trust tk-trust-ai" title="실제 AI 모델이 생성한 결과입니다">실제 AI</span>`;
 }
+function copyBtn() { return `<button class="tk-copy" type="button" data-copy-result title="결과를 클립보드로 복사">📋 복사</button>`; }
+function copyModalResult() {
+  const md = mediaResultEl().querySelector(".md-output");
+  const t = (md ? md.innerText : mediaResultEl().innerText) || "";
+  if (!t.trim()) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast("결과를 복사했습니다.", "success"), () => toast("복사 실패", "warn"));
+}
 
 // 현재 매체의 전문 도구팩 메타를 받아 동적 렌더(종류 배지·그룹·툴팁).
 async function loadToolkit(medium) {
@@ -2847,7 +2856,7 @@ function renderToolkitAnalysis(r, fallback) {
   const ov = Number(r.overall) || 0;
   const ovClass = ov >= 80 ? "tk-ov-good" : ov >= 60 ? "tk-ov-mid" : "tk-ov-bad";
   return `<div class="md-output">
-    <div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(r.label || "진단")}</span>${trustBadge(fallback)}</div>
+    <div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(r.label || "진단")}</span>${trustBadge(fallback)}${copyBtn()}</div>
     <h3>종합 <span class="tk-ov ${ovClass}">${ov}/100</span></h3>
     ${bars ? `<div class="tk-bars">${bars}</div>` : ""}
     ${flags ? `<p><strong>⚠ 발견된 문제</strong></p><ul class="tk-flags">${flags}</ul>` : ""}
@@ -3542,6 +3551,7 @@ function boot() {
   el("mediaClose")?.addEventListener("click", closeMediaModal);
   el("mediaModal")?.addEventListener("click", (e) => {
     if (e.target === el("mediaModal")) { closeMediaModal(); return; }
+    if (e.target.closest("[data-copy-result]")) { copyModalResult(); return; }
     const act = e.target.closest("[data-media-act]");
     if (act) { handleMediaAction(act.dataset.mediaAct); return; }
     const tk = e.target.closest("[data-toolkit-id]");
