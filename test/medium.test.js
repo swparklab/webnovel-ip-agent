@@ -424,3 +424,14 @@ test("㉗ 캐릭터 시트 고정: LOCK 토큰·시트·네거티브·모델 고
   assert.ok(!an.buildVisualContePrompt({ input: {}, medium: "animation", oneSheet: {}, format: "short" }).system.includes("CHARACTER LOCK"), "토큰 없는데 주입됨");
   assert.ok(as.buildArtStylePrompt({ input: { characterLock: "TOK" }, oneSheet: {}, format: "short" }).system.includes("CHARACTER LOCK"), "그림풍 주입 누락");
 });
+
+test("㉘ 매체별 입력: 다큐·광고는 웹소설 장르/플레이북을 쓰지 않고, 서사 매체는 장르 정서를 참고한다", () => {
+  for (const m of ["documentary", "advertising"]) {
+    const b = buildMediaInputBlock({ medium: m, format: "medium", genre: "romanceFantasy", ipTitle: "T" });
+    assert.ok(!b.includes("로맨스판타지"), `${m}: 웹소설 장르 라벨이 남음`);
+    assert.ok(!b.includes("흥행 성공문법") && !b.includes("초반 5화 공식"), `${m}: 웹소설 플레이북이 주입됨`);
+  }
+  // 영화/드라마/애니는 장르를 '정서 참고'로 주입.
+  const film = buildMediaInputBlock({ medium: "film", format: "long", genre: "thriller", ipTitle: "T" });
+  assert.ok(film.includes("장르 정서(참고)"), "영화에 장르 정서 참고 누락");
+});

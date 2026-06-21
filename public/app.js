@@ -182,6 +182,9 @@ function activeAgentsFor(studio, medium) {
   return STUDIOS[studio] || PRODUCTION_AGENTS;
 }
 
+// 매체에서 웹소설 영어 섹션 헤더를 중립 한글로 바꾼다(웹소설은 원본 유지).
+const SECTION_LABELS_MEDIA = { secWorld: "세계·배경 설계", secCast: "인물·갈등", secNarr: "서사 설계", secTheme: "주제·차별점" };
+
 // 매체별 필드 라벨 적용(제작 스튜디오에서만 호출). 웹소설은 원본 라벨로 복원.
 function applyMediumLabels(medium) {
   const map = MEDIUM_FIELD_LABELS[medium] || {};
@@ -190,6 +193,13 @@ function applyMediumLabels(medium) {
     if (!span) return;
     if (!(id in _origFieldLabels)) _origFieldLabels[id] = span.textContent;
     span.textContent = map[id] || _origFieldLabels[id];
+  });
+  // 섹션 헤더(웹소설 영어 → 매체 중립 한글).
+  Object.entries(SECTION_LABELS_MEDIA).forEach(([id, text]) => {
+    const node = document.querySelector(`[data-label="${id}"]`);
+    if (!node) return;
+    if (!(id in _origFieldLabels)) _origFieldLabels[id] = node.textContent;
+    node.textContent = (medium !== "webnovel") ? text : _origFieldLabels[id];
   });
 }
 
@@ -201,12 +211,34 @@ function applyFormatLabels(medium) {
   Array.from(sel.options).forEach((o) => { if (map[o.value]) o.textContent = map[o.value]; });
 }
 
-// 매체별로 해당 없는 필드(연재 플랫폼·리듬·OSMU 등)를 숨긴다.
+// 매체별로 '웹소설 전용' 세부 입력 필드를 숨긴다. 그 매체의 세부 입력은 '상세 설계 요소'(매체별)가 담당한다.
+//  - 서사 매체(영화/드라마/애니)는 인물·갈등·반전 등 서사 필드를 유지하고 웹소설 시스템 필드만 숨김.
+//  - 다큐/광고는 픽션 세계관·인물 바이블 필드를 대거 숨김.
+const MEDIUM_HIDE_FIELDS = {
+  webnovel: [],
+  animation: ["payoffPlan", "cadence"],
+  film: ["powerSystem", "payoffPlan", "cadence"],
+  drama: ["powerSystem", "payoffPlan", "cadence"],
+  documentary: ["genre", "subgenre", "blendGenres", "futureYear", "cadence", "powerSystem", "factions", "worldHistory", "aiEntity", "desire", "antagonistLogic", "protagonistSecret", "supportingCast", "loveInterest", "worldRule", "coreMystery", "twistPlan", "payoffPlan", "contentRating", "scienceConstraint"],
+  advertising: ["genre", "subgenre", "blendGenres", "futureYear", "cadence", "powerSystem", "factions", "worldHistory", "aiEntity", "desire", "antagonistLogic", "protagonistSecret", "supportingCast", "loveInterest", "worldRule", "coreMystery", "twistPlan", "payoffPlan", "contentRating", "scienceConstraint", "socialShift"],
+};
+const _ALL_HIDEABLE_FIELDS = [...new Set(Object.values(MEDIUM_HIDE_FIELDS).flat())];
+
+// 매체별로 해당 없는 필드(연재 플랫폼·리듬·OSMU + 웹소설 전용 세부 필드)를 숨긴다.
 function applyMediumVisibility(medium) {
   document.querySelectorAll("[data-medium-hide]").forEach((n) => {
     const list = (n.getAttribute("data-medium-hide") || "").split(",").map((s) => s.trim());
     n.hidden = list.includes(medium);
   });
+  // 필드 단위: 먼저 모두 보이게 한 뒤, 이 매체에서 숨길 필드만 숨긴다.
+  const hide = new Set(MEDIUM_HIDE_FIELDS[medium] || []);
+  _ALL_HIDEABLE_FIELDS.forEach((id) => {
+    const node = el(id);
+    const field = node && node.closest && node.closest(".field, .switch");
+    if (field) field.hidden = hide.has(id);
+  });
+  // 장르를 숨기는 매체(다큐·광고)에선 장르 관련 힌트도 함께 숨긴다.
+  ["subgenreFormula", "blendGenresHint"].forEach((id) => { const n = el(id); if (n) n.hidden = hide.has("genre"); });
 }
 
 // 매체별 감독 스타일 드롭다운을 채운다(없는 매체면 행을 숨긴다).

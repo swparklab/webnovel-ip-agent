@@ -192,7 +192,7 @@
                 <option value="murimReturn">무림 회귀 · 환생</option>
                 <option value="fusionMurim">퓨전 무협 (시스템·이세계)</option>
               </select></label>
-            <p class="section-hint">Ctrl(⌘)+클릭으로 여러 장르를 함께 선택. 비우면 주 장르만 적용됩니다.</p>
+            <p class="section-hint" id="blendGenresHint">Ctrl(⌘)+클릭으로 여러 장르를 함께 선택. 비우면 주 장르만 적용됩니다.</p>
             <div class="field" data-medium-hide="film,documentary,advertising"><span>연재 플랫폼 (여러 개 선택 / 미선택 가능)</span>
               <div class="switches" id="platformChecks" aria-label="연재 플랫폼">
                 <label class="switch"><input type="checkbox" data-pf="kakao" /><span>카카오페이지</span></label>
@@ -235,7 +235,7 @@
           </div>
 
           <div class="form-section prod-only">
-            <p class="section-note">World Engine</p>
+            <p class="section-note" data-label="secWorld">World Engine</p>
             <div class="field-pair">
               <label class="field"><span data-label="futureYear">시대 / 배경</span>
                 <input id="futureYear" name="futureYear" autocomplete="off" placeholder="예: 현대, 2041, 가상 제국 시대" /></label>
@@ -264,7 +264,7 @@
           </div>
 
           <div class="form-section prod-only">
-            <p class="section-note">Conflict Cast</p>
+            <p class="section-note" data-label="secCast">Conflict Cast</p>
             <div class="field-pair">
               <label class="field"><span data-label="protagonist">주인공</span>
                 <input id="protagonist" name="protagonist" autocomplete="off" placeholder="이름, 직업, 결핍" /></label>
@@ -292,7 +292,7 @@
           </div>
 
           <div class="form-section prod-only">
-            <p class="section-note">Narrative Design</p>
+            <p class="section-note" data-label="secNarr">Narrative Design</p>
             <label class="field"><span data-label="centralConflict">중심 갈등 (한 줄)</span>
               <input id="centralConflict" name="centralConflict" autocomplete="off" placeholder="작품 전체를 관통하는 핵심 대립" /></label>
             <label class="field"><span>중심 떡밥 / 미스터리</span>
@@ -304,7 +304,7 @@
           </div>
 
           <div class="form-section prod-only">
-            <p class="section-note">Theme &amp; Market</p>
+            <p class="section-note" data-label="secTheme">Theme &amp; Market</p>
             <label class="field"><span>주제의식 / 메시지</span>
               <textarea id="theme" name="theme" rows="2" placeholder="이 작품이 결국 무엇에 대한 이야기인가"></textarea></label>
             <div class="field-pair">
