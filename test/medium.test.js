@@ -400,3 +400,27 @@ test("㉖ 그림풍 추천: 작품 정서에 맞춰 서로 다른 화풍 A/B/C +
   const bp = as.buildArtStylePrompt({ input: { ipTitle: "The Fading Line", protagonist: "사진작가" }, oneSheet: { centralObject: "흑백사진" }, format: "short", targetModel: "runway" });
   assert.ok(bp.system.includes("공통 베이스") && bp.recommended.length === 3, "그림풍 빌더 비정상");
 });
+
+test("㉗ 캐릭터 시트 고정: LOCK 토큰·시트·네거티브·모델 고정법 + 콘티/그림풍 주입", () => {
+  const cs = require("../lib/charactersheet");
+  const an = require("../lib/aianimation");
+  const as = require("../lib/artstyle");
+  // 폴백 산출
+  const lc = cs.localCharSheet({ input: { protagonist: "노인" }, oneSheet: { continuityBible: "어두운 코트" }, targetModel: "kling" });
+  assert.ok(lc.lockToken && lc.sheetPrompt && lc.expressionSheet && lc.negative && lc.modelMethod, "캐릭터 시트 필드 누락");
+  assert.ok(lc.negative.includes("morphing") || lc.negative.includes("inconsistent"), "일관성 네거티브 누락");
+  assert.ok(Array.isArray(lc.methods) && lc.methods.length, "고정법 목록 누락");
+  // 파서
+  const parsed = cs.parseCharSheet('{"lockToken":"X consistent character","sheetPrompt":"sheet","negative":"n"}');
+  assert.equal(parsed.lockToken, "X consistent character");
+  assert.equal(cs.parseCharSheet('{"sheetPrompt":"no token"}'), null); // lockToken 없으면 무효
+  // 모델별 고정법 존재(5종)
+  assert.ok(Object.keys(cs.CONSISTENCY_METHODS).length >= 5, "모델별 고정법 부족");
+  // LOCK 블록은 토큰 있을 때만.
+  assert.ok(cs.buildCharLockBlock("tok").includes("CHARACTER LOCK") && cs.buildCharLockBlock("tok").includes("한 글자도 바꾸지"), "LOCK 블록 누락");
+  assert.equal(cs.buildCharLockBlock(""), "", "토큰 없으면 빈 블록");
+  // 콘티·그림풍 프롬프트에 주입.
+  assert.ok(an.buildVisualContePrompt({ input: { characterLock: "TOK" }, medium: "animation", oneSheet: {}, format: "short" }).system.includes("CHARACTER LOCK"), "콘티 주입 누락");
+  assert.ok(!an.buildVisualContePrompt({ input: {}, medium: "animation", oneSheet: {}, format: "short" }).system.includes("CHARACTER LOCK"), "토큰 없는데 주입됨");
+  assert.ok(as.buildArtStylePrompt({ input: { characterLock: "TOK" }, oneSheet: {}, format: "short" }).system.includes("CHARACTER LOCK"), "그림풍 주입 누락");
+});

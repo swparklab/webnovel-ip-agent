@@ -47,6 +47,7 @@ const {
   buildVisualContePrompt, localVisualConte, isVisual: isVisualMedium, AI_VIDEO_MODELS,
 } = require("./lib/aianimation");
 const { buildArtStylePrompt, localArtStyle } = require("./lib/artstyle");
+const { buildCharSheetPrompt, parseCharSheet, localCharSheet } = require("./lib/charactersheet");
 const {
   buildGuaranteePrompt, parseGuarantee, localGuarantee,
   buildUpgradeBrief, scoreGuarantee,
@@ -546,6 +547,24 @@ async function handleMediaAudit(req, res) {
   } catch (err) {
     return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest), note: err?.message });
   }
+}
+
+// 캐릭터 시트 고정: 디자인 시트 + 재사용 CHARACTER LOCK 토큰 + 모델별 일관성 고정법. JSON.
+async function handleCharSheet(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const oneSheet = payload.oneSheet || input.oneSheet || null;
+  const targetModel = payload.targetModel || input.videoModel || "kling";
+  const styleCore = String(payload.styleCore || "");
+  const model = payload.model || config.defaultModel;
+  const mode = resolveMode();
+  if (mode === "local") return sendJson(res, 200, { ok: true, charsheet: localCharSheet({ input, oneSheet, styleCore, targetModel }) });
+  try {
+    const { system, user } = buildCharSheetPrompt({ input, oneSheet, styleCore, targetModel });
+    const { text } = await streamMessage({ provider: mode, model, system, messages: [{ role: "user", content: user }], temperature: 0.5, maxTokens: 1400 });
+    const cs = parseCharSheet(text);
+    return sendJson(res, 200, { ok: true, charsheet: cs || localCharSheet({ input, oneSheet, styleCore, targetModel }), note: cs ? undefined : "파싱 실패로 폴백" });
+  } catch (err) { return sendJson(res, 200, { ok: true, charsheet: localCharSheet({ input, oneSheet, styleCore, targetModel }), note: err?.message }); }
 }
 
 // 그림풍 추천: 작품에 알맞은 A/B/C 화풍 + 스타일별 생성 프롬프트(키비주얼·캐릭터·장면). SSE.
@@ -1126,6 +1145,10 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/media-audit") {
     return handleMediaAudit(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/charsheet") {
+    return handleCharSheet(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/artstyle") {

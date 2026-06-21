@@ -418,6 +418,7 @@ const state = {
   designSpecMedium: "",  // designElements가 로드된 매체
   oneSheet: {},          // 감독 원시트 12블록 { key: text }
   oneSheetLocked: false, // LOCK 여부(잠기면 모든 산출물에 주입)
+  characterLock: "",     // 캐릭터 고정 토큰(잠기면 콘티·그림풍·영상 프롬프트에 주입)
   abBusy: false,         // A/B 비교 생성 진행 중
   memories: {},          // n -> 연재 메모리(요약·떡밥·인물·캐논). 장거리 연속성용.
   memoryBusy: {},        // n -> 메모리 생성 중 여부
@@ -866,6 +867,8 @@ function collectInput() {
   if (state.oneSheetLocked && state.oneSheet && Object.keys(state.oneSheet).some((k) => String(state.oneSheet[k] || "").trim())) {
     input.oneSheet = { ...state.oneSheet };
   }
+  // 🧍 캐릭터 고정 토큰 — 콘티·그림풍·영상 프롬프트에 동일 인물로 주입.
+  if (state.characterLock && String(state.characterLock).trim()) input.characterLock = state.characterLock;
   return input;
 }
 
@@ -907,6 +910,8 @@ function fillForm(data) {
   state.oneSheet = (data.oneSheet && typeof data.oneSheet === "object") ? { ...data.oneSheet } : {};
   state.oneSheetLocked = Object.keys(state.oneSheet).length > 0;
   if (typeof updateOnesheetLockUI === "function") updateOnesheetLockUI();
+  // 캐릭터 고정 토큰 복원.
+  state.characterLock = (typeof data.characterLock === "string") ? data.characterLock : "";
 }
 
 /* ------------------------------ Rendering ------------------------------- */
@@ -2762,6 +2767,7 @@ function handleMediaAction(act) {
   if (act === "audit") return mediaAuditAction();
   if (act === "convert") return mediaConvertAction();
   if (act === "artstyle") return mediaArtstyle();
+  if (act === "charsheet") return mediaCharsheet();
   if (act === "techmap") return mediaTechmap();
   if (act === "festival") return mediaFestival();
   if (act === "videoprompt") return mediaVideoprompt();
@@ -2770,6 +2776,32 @@ function handleMediaAction(act) {
 
 async function mediaArtstyle() {
   await mediaStream("/api/artstyle", { input: collectInput(), oneSheet: state.oneSheet, format: el("format").value, targetModel: (el("videoModel") && el("videoModel").value) || "kling", model: el("modelSelect").value }, "🎨 그림풍 추천 (A/B/C + 스타일별 프롬프트)");
+}
+
+// 🧍 캐릭터 시트 고정: 디자인 시트 프롬프트 + 재사용 CHARACTER LOCK 토큰 + 모델별 고정법.
+async function mediaCharsheet() {
+  mediaBusy("캐릭터 시트 고정 프롬프트 생성 중…");
+  try {
+    const data = await mediaPost("/api/charsheet", { input: collectInput(), oneSheet: state.oneSheet, targetModel: (el("videoModel") && el("videoModel").value) || "kling", model: el("modelSelect").value });
+    if (!data.ok || !data.charsheet) throw new Error(data.error || "생성 실패");
+    const c = data.charsheet;
+    state.characterLock = c.lockToken || "";   // 잠금 → 콘티·그림풍·영상 프롬프트에 자동 주입
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    const methods = (c.methods || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    mediaResultEl().innerHTML = `<div class="md-output">
+      <h3>🧍 캐릭터 시트 고정 ${state.characterLock ? "· 🔒 LOCK 적용됨" : ""}</h3>
+      <p style="opacity:.85">아래 <strong>CHARACTER LOCK 토큰</strong>이 잠겨, 이제 콘티·그림풍·영상 프롬프트에 <strong>모든 컷 동일 인물</strong>로 자동 주입됩니다.</p>
+      <p><strong>🔒 CHARACTER LOCK 토큰 (모든 샷 맨 앞에 반복 삽입)</strong></p>
+      <pre style="white-space:pre-wrap">${escapeHtml(c.lockToken || "")}</pre>
+      <p><strong>캐릭터 디자인 시트 프롬프트 (턴어라운드)</strong></p>
+      <pre style="white-space:pre-wrap">${escapeHtml(c.sheetPrompt || "")}</pre>
+      ${c.expressionSheet ? `<p><strong>표정 시트 프롬프트</strong></p><pre style="white-space:pre-wrap">${escapeHtml(c.expressionSheet)}</pre>` : ""}
+      <p><strong>일관성 네거티브</strong></p><pre style="white-space:pre-wrap">${escapeHtml(c.negative || "")}</pre>
+      ${c.modelMethod ? `<p><strong>${escapeHtml((el("videoModel") && el("videoModel").value) || "Kling")} 고정법:</strong> ${escapeHtml(c.modelMethod)}</p>` : ""}
+      ${methods ? `<p><strong>일반 일관성 고정법</strong></p><ul>${methods}</ul>` : ""}
+    </div>`;
+    toast("🧍 캐릭터를 LOCK했습니다 — 콘티·그림풍·영상 프롬프트에 동일 인물로 자동 반영됩니다.", "success");
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">생성 실패: ${escapeHtml(err.message || "")}</div>`; }
 }
 
 /* ----------------------- 🎥 AI 영상 제작 도구 ----------------------- */
