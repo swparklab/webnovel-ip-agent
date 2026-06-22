@@ -582,3 +582,20 @@ body.studio-business #brandEyebrow { color: #a55f00; }
 .tk-chip:hover { background: rgba(12,123,99,.1); }
 .tk-copy { font-size: 11px; padding: 2px 8px; border-radius: 6px; border: 1px solid rgba(127,127,127,.35); background: transparent; cursor: pointer; margin-left: auto; }
 .tk-copy:hover { background: rgba(127,127,127,.12); }
+
+/* ===== 빠른 시작 템플릿 ===== */
+.starter-block { margin-top: 8px; }
+.starter-panel { display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.starter-card { text-align: left; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid rgba(127,127,127,.28); border-radius: 8px; background: transparent; cursor: pointer; }
+.starter-card:hover { border-color: var(--accent, #0c7b63); background: rgba(12,123,99,.06); }
+.starter-card strong { font-size: 13px; }
+.starter-card span { font-size: 11.5px; opacity: .78; line-height: 1.4; }
+/* ===== 산출물 보관함 ===== */
+.media-workspace { margin-top: 10px; border-top: 1px dashed rgba(127,127,127,.3); padding-top: 8px; }
+.ws-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.ws-head strong { font-size: 13px; }
+.ws-item { border: 1px solid rgba(127,127,127,.22); border-radius: 8px; margin: 4px 0; padding: 2px 8px; }
+.ws-item > summary { cursor: pointer; font-size: 12.5px; font-weight: 600; padding: 4px 0; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ws-item > summary::-webkit-details-marker { display: none; }
+.ws-x { border: none; background: transparent; cursor: pointer; opacity: .55; font-size: 12px; }
+.ws-x:hover { opacity: 1; color: #c12a2a; }

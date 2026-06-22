@@ -443,11 +443,14 @@ const state = {
   mediaReviseNotes: "",  // 흥행 보증: 보증 루프 보완 지시(재생성 시 주입)
   lastGuarantee: null,   // 마지막 흥행 보증서
   designSpec: {},        // 상세 설계 요소 값 { key: value }
+  starterCache: [],      // 현재 매체 빠른 시작 템플릿 목록
+  workspace: [],         // 📂 보관함: 매체 작업대 산출물 누적 { id, label, html, text }
   designElements: [],    // 현재 매체의 설계 요소 정의
   designSpecMedium: "",  // designElements가 로드된 매체
   oneSheet: {},          // 감독 원시트 12블록 { key: text }
   oneSheetLocked: false, // LOCK 여부(잠기면 모든 산출물에 주입)
   characterLock: "",     // 캐릭터 고정 토큰(잠기면 콘티·그림풍·영상 프롬프트에 주입)
+  worldLock: "",         // 세계 설정 LOCK 토큰(잠기면 모든 산출에 세계 규칙·프롭 고정)
   toolkitMeta: { tools: [], cross: [] }, // 현재 매체 전문 도구팩 메타(/api/toolkit-meta)
   toolkitDone: new Set(),// 이번 세션에서 실행한 도구 id(다음작업 추천용)
   abBusy: false,         // A/B 비교 생성 진행 중
@@ -900,6 +903,8 @@ function collectInput() {
   }
   // 🧍 캐릭터 고정 토큰 — 콘티·그림풍·영상 프롬프트에 동일 인물로 주입.
   if (state.characterLock && String(state.characterLock).trim()) input.characterLock = state.characterLock;
+  // 🌍 세계 설정 LOCK — 모든 산출에 세계 규칙·프롭·시각 코드 고정.
+  if (state.worldLock && String(state.worldLock).trim()) input.worldLock = state.worldLock;
   return input;
 }
 
@@ -943,6 +948,8 @@ function fillForm(data) {
   if (typeof updateOnesheetLockUI === "function") updateOnesheetLockUI();
   // 캐릭터 고정 토큰 복원.
   state.characterLock = (typeof data.characterLock === "string") ? data.characterLock : "";
+  // 세계 설정 LOCK 토큰 복원.
+  state.worldLock = (typeof data.worldLock === "string") ? data.worldLock : "";
 }
 
 /* ------------------------------ Rendering ------------------------------- */
@@ -2527,6 +2534,49 @@ async function runTool() {
   }
 }
 
+/* ----------------------- ✨ 빠른 시작 템플릿 ----------------------- */
+
+async function toggleStarterPanel() {
+  const panel = el("starterPanel");
+  if (!panel) return;
+  if (!panel.hidden) { panel.hidden = true; return; }
+  panel.hidden = false;
+  panel.innerHTML = `<div class="impact-loading"><span class="dot"></span>템플릿 불러오는 중…</div>`;
+  try {
+    const res = await fetch(`/api/starters?medium=${encodeURIComponent(currentMedium())}`);
+    const data = await res.json();
+    state.starterCache = (data.ok && data.starters) || [];
+    renderStarterCards();
+  } catch { panel.innerHTML = `<p class="section-hint">템플릿을 불러오지 못했습니다.</p>`; }
+}
+
+function renderStarterCards() {
+  const panel = el("starterPanel");
+  const list = state.starterCache || [];
+  if (!list.length) { panel.innerHTML = `<p class="section-hint">이 매체의 템플릿이 아직 없습니다.</p>`; return; }
+  panel.innerHTML = `<p class="section-hint" style="margin:2px 0 6px">${escapeHtml(MEDIUM_LABELS_KO[currentMedium()] || "매체")} · 클릭하면 폼이 한 번에 채워집니다 (이후 자유롭게 수정)</p>` +
+    list.map((s) => `<button class="starter-card" type="button" data-starter-key="${escapeHtml(s.key)}"><strong>${escapeHtml(s.label)}</strong><span>${escapeHtml(s.blurb)}</span></button>`).join("");
+}
+
+function applyStarter(key) {
+  const s = (state.starterCache || []).find((x) => x.key === key);
+  if (!s) return;
+  const f = s.fields || {};
+  const set = (id, v) => { const e = el(id); if (e && v != null && v !== "") e.value = v; };
+  set("ipTitle", f.ipTitle); set("logline", f.logline); set("sfPremise", f.premise);
+  set("protagonist", f.protagonist); set("antagonist", f.antagonist); set("centralConflict", f.centralConflict);
+  set("theme", f.theme); set("tone", f.tone); set("seasonGoal", f.seasonGoal);
+  if (s.format && el("format")) el("format").value = s.format;
+  const gf = el("genre") && el("genre").closest(".field");
+  if (s.genre && el("genre") && gf && !gf.hidden) { el("genre").value = s.genre; if (typeof onGenreChange === "function") onGenreChange(false); }
+  if (s.directorStyle && el("directorStyle")) el("directorStyle").value = s.directorStyle;
+  if (f.coreObject) { state.designSpec = state.designSpec || {}; state.designSpec.coreObject = f.coreObject; }
+  el("starterPanel").hidden = true;
+  localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+  el("runStatus").textContent = "템플릿 적용됨";
+  toast(`✨ '${s.label}' 템플릿을 적용했습니다 — 바로 실행하거나 다듬으세요.`, "success");
+}
+
 /* ----------------------- 🎬 매체 작업대 ----------------------- */
 
 function openMediaModal() {
@@ -2591,7 +2641,7 @@ async function mediaStream(url, body, tag) {
         else if (type === "done") { acc = d.result || acc; if (typeof d.fallback !== "undefined") fallback = !!d.fallback; }
       }
     }
-    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span>${trustBadge(fallback)}${copyBtn()}</div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
+    mediaResultEl().innerHTML = `<div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(tag)}</span>${trustBadge(fallback)}${copyBtn()}${pinBtn()}</div><div class="md-output">${window.renderMarkdown(acc)}</div>`;
     return acc;
   } catch (err) {
     mediaResultEl().innerHTML = `<div class="impact-loading">실패: ${escapeHtml(err.message || "")}</div>`;
@@ -2797,11 +2847,45 @@ function trustBadge(fallback) {
     : `<span class="tk-trust tk-trust-ai" title="실제 AI 모델이 생성한 결과입니다">실제 AI</span>`;
 }
 function copyBtn() { return `<button class="tk-copy" type="button" data-copy-result title="결과를 클립보드로 복사">📋 복사</button>`; }
+function pinBtn() { return `<button class="tk-copy" type="button" data-pin-result title="이 결과를 보관함에 저장(누적·내보내기)">📌 보관</button>`; }
 function copyModalResult() {
   const md = mediaResultEl().querySelector(".md-output");
   const t = (md ? md.innerText : mediaResultEl().innerText) || "";
   if (!t.trim()) return;
   if (navigator.clipboard) navigator.clipboard.writeText(t).then(() => toast("결과를 복사했습니다.", "success"), () => toast("복사 실패", "warn"));
+}
+
+/* ----------------------- 📂 산출물 보관함 (Workspace) ----------------------- */
+function pinCurrentResult() {
+  const r = mediaResultEl();
+  const md = r.querySelector(".md-output");
+  const tag = r.querySelector(".tool-result-tag");
+  const html = md ? md.innerHTML : r.innerHTML;
+  if (!html || !html.trim()) return;
+  const label = ((tag ? tag.textContent : "산출물") || "산출물").trim();
+  const id = "w" + (state._wseq = (state._wseq || 0) + 1);
+  state.workspace.push({ id, label, html, text: (md ? md.innerText : r.innerText) || "" });
+  renderWorkspace();
+  toast("📌 보관함에 저장했습니다.", "success");
+}
+function renderWorkspace() {
+  const host = el("mediaWorkspace");
+  if (!host) return;
+  if (!state.workspace.length) { host.hidden = true; host.innerHTML = ""; return; }
+  host.hidden = false;
+  host.innerHTML = `<div class="ws-head"><strong>📂 보관함 (${state.workspace.length})</strong>`
+    + `<button class="tk-copy" type="button" data-ws-export title="보관한 산출물을 .md 파일로">⬇ 전체 .md</button>`
+    + `<button class="tk-copy" type="button" data-ws-clear title="보관함 비우기">비우기</button></div>`
+    + state.workspace.map((w) => `<details class="ws-item"><summary><span>${escapeHtml(w.label)}</span><button class="ws-x" type="button" data-ws-remove="${w.id}" title="삭제">✕</button></summary><div class="md-output">${w.html}</div></details>`).join("");
+}
+function exportWorkspaceMd() {
+  if (!state.workspace.length) return;
+  const md = state.workspace.map((w) => `# ${w.label}\n\n${w.text}`).join("\n\n---\n\n");
+  const blob = new Blob([md], { type: "text/markdown;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `${(el("ipTitle").value || "작업대").trim()}_보관함.md`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
 // 현재 매체의 전문 도구팩 메타를 받아 동적 렌더(종류 배지·그룹·툴팁).
@@ -2856,7 +2940,7 @@ function renderToolkitAnalysis(r, fallback) {
   const ov = Number(r.overall) || 0;
   const ovClass = ov >= 80 ? "tk-ov-good" : ov >= 60 ? "tk-ov-mid" : "tk-ov-bad";
   return `<div class="md-output">
-    <div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(r.label || "진단")}</span>${trustBadge(fallback)}${copyBtn()}</div>
+    <div class="tool-result-actions"><span class="tool-result-tag">${escapeHtml(r.label || "진단")}</span>${trustBadge(fallback)}${copyBtn()}${pinBtn()}</div>
     <h3>종합 <span class="tk-ov ${ovClass}">${ov}/100</span></h3>
     ${bars ? `<div class="tk-bars">${bars}</div>` : ""}
     ${flags ? `<p><strong>⚠ 발견된 문제</strong></p><ul class="tk-flags">${flags}</ul>` : ""}
@@ -2894,12 +2978,58 @@ function handleMediaAction(act) {
   if (act === "critique") return mediaCritiqueAction();
   if (act === "audit") return mediaAuditAction();
   if (act === "convert") return mediaConvertAction();
+  if (act === "worldlock") return mediaWorldLock();
+  if (act === "canoncheck") return mediaCanonCheck();
+  if (act === "localize") return mediaLocalize();
   if (act === "artstyle") return mediaArtstyle();
   if (act === "charsheet") return mediaCharsheet();
   if (act === "techmap") return mediaTechmap();
   if (act === "festival") return mediaFestival();
   if (act === "videoprompt") return mediaVideoprompt();
   if (act === "formconvert") return mediaFormconvert();
+}
+
+// 🌍 세계 설정 LOCK: 세계 바이블 생성 → WORLD LOCK 토큰을 잠가 모든 산출에 주입.
+async function mediaWorldLock() {
+  mediaBusy("세계 설정 바이블 생성 중…");
+  try {
+    const data = await mediaPost("/api/worldbible", { input: collectInput(), medium: currentMedium(), oneSheet: state.oneSheet, model: el("modelSelect").value });
+    if (!data.ok || !data.bible) throw new Error(data.error || "생성 실패");
+    const b = data.bible;
+    state.worldLock = b.lockToken || "";
+    localStorage.setItem("sfAgentInput", JSON.stringify(collectInput()));
+    const li = (arr) => (arr || []).map((x) => `<li>${escapeHtml(x)}</li>`).join("");
+    mediaResultEl().innerHTML = `<div class="md-output">
+      <div class="tool-result-actions"><span class="tool-result-tag">🌍 세계 LOCK ${state.worldLock ? "· 🔒 적용됨" : ""}</span>${trustBadge(!!data.fallback)}${copyBtn()}${pinBtn()}</div>
+      <p style="opacity:.85">아래 <strong>WORLD LOCK</strong>이 잠겨, 콘티·그림풍·회차 등 모든 산출에 세계 규칙·프롭이 동일하게 주입됩니다.</p>
+      <p><strong>🔒 WORLD LOCK 토큰</strong></p><pre style="white-space:pre-wrap">${escapeHtml(b.lockToken || "")}</pre>
+      ${b.rules && b.rules.length ? `<p><strong>세계 규칙</strong></p><ul>${li(b.rules)}</ul>` : ""}
+      ${b.taboos && b.taboos.length ? `<p><strong>금기</strong></p><ul>${li(b.taboos)}</ul>` : ""}
+      ${b.costReward ? `<p><strong>비용/보상:</strong> ${escapeHtml(b.costReward)}</p>` : ""}
+      ${b.keyPlaces && b.keyPlaces.length ? `<p><strong>핵심 장소</strong></p><ul>${li(b.keyPlaces)}</ul>` : ""}
+      ${b.recurringProps && b.recurringProps.length ? `<p><strong>반복 프롭</strong></p><ul>${li(b.recurringProps)}</ul>` : ""}
+      ${b.visualCode ? `<p><strong>시각 코드:</strong> ${escapeHtml(b.visualCode)}</p>` : ""}
+    </div>`;
+    toast("🌍 세계 설정을 LOCK했습니다 — 모든 산출에 자동 반영됩니다.", "success");
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">생성 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+// 🔍 캐논 연속성 검사: 산출물을 원시트·LOCK과 대조해 설정 모순 진단.
+async function mediaCanonCheck() {
+  const text = (state.buffers[state.activeTab] || "").trim() || mediaDigest();
+  mediaBusy("캐논 연속성 검사 중…");
+  try {
+    const data = await mediaPost("/api/canoncheck", { input: collectInput(), medium: currentMedium(), oneSheet: state.oneSheet, worldLock: state.worldLock, text, model: el("modelSelect").value });
+    if (!data.ok || !data.result) throw new Error(data.error || "검사 실패");
+    mediaResultEl().innerHTML = renderToolkitAnalysis(data.result, !!data.fallback);
+  } catch (err) { mediaResultEl().innerHTML = `<div class="impact-loading">검사 실패: ${escapeHtml(err.message || "")}</div>`; }
+}
+
+// 🌐 현지화: 현재 작품/산출물을 타깃 언어로 transcreation.
+async function mediaLocalize() {
+  const target = (el("localizeTarget") && el("localizeTarget").value) || "en";
+  const text = (state.buffers[state.activeTab] || "").trim();
+  await mediaStream("/api/localize", { input: collectInput(), medium: currentMedium(), target, text, model: el("modelSelect").value }, `🌐 현지화 (${target.toUpperCase()})`);
 }
 
 async function mediaArtstyle() {
@@ -3490,6 +3620,8 @@ function boot() {
   el("ideateBtn").addEventListener("click", ideateFill);
   el("completeBtn").addEventListener("click", completeFill);
   el("impactBtn").addEventListener("click", runImpact);
+  el("starterToggle")?.addEventListener("click", toggleStarterPanel);
+  el("starterPanel")?.addEventListener("click", (e) => { const b = e.target.closest("[data-starter-key]"); if (b) applyStarter(b.dataset.starterKey); });
   el("impactClose").addEventListener("click", closeImpactModal);
   el("impactModal").addEventListener("click", (e) => { if (e.target === el("impactModal")) closeImpactModal(); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !el("impactModal").hidden) closeImpactModal(); });
@@ -3552,6 +3684,11 @@ function boot() {
   el("mediaModal")?.addEventListener("click", (e) => {
     if (e.target === el("mediaModal")) { closeMediaModal(); return; }
     if (e.target.closest("[data-copy-result]")) { copyModalResult(); return; }
+    if (e.target.closest("[data-pin-result]")) { pinCurrentResult(); return; }
+    if (e.target.closest("[data-ws-export]")) { exportWorkspaceMd(); return; }
+    if (e.target.closest("[data-ws-clear]")) { state.workspace = []; renderWorkspace(); return; }
+    const wsRemove = e.target.closest("[data-ws-remove]");
+    if (wsRemove) { state.workspace = state.workspace.filter((w) => w.id !== wsRemove.dataset.wsRemove); renderWorkspace(); return; }
     const act = e.target.closest("[data-media-act]");
     if (act) { handleMediaAction(act.dataset.mediaAct); return; }
     const tk = e.target.closest("[data-toolkit-id]");

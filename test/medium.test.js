@@ -469,6 +469,53 @@ test("㉚ 매체별 전문 도구팩: 6 매체 모두 도구 보유 + 생성기/
   assert.ok(parsed.overall === 77 && parsed.flags[0].issue === "x", "분석 파서 불량");
 });
 
+test("㉛ 빠른 시작 템플릿: 6 매체 각 3개, 핵심 필드 완비", () => {
+  const st = require("../lib/starters");
+  const need = ["ipTitle", "logline", "premise", "protagonist", "antagonist", "centralConflict", "theme", "tone", "seasonGoal", "coreObject"];
+  for (const m of ["webnovel", "film", "documentary", "drama", "animation", "advertising"]) {
+    const list = st.starterMeta(m);
+    assert.ok(list.length >= 3, `${m}: 시작 템플릿 3개 미만`);
+    for (const s of list) {
+      assert.ok(s.key && s.label && s.blurb && ["short", "medium", "long"].includes(s.format), `${m}/${s.key}: 메타 불량`);
+      assert.ok(need.every((k) => s.fields[k] && String(s.fields[k]).trim()), `${m}/${s.key}: 필드 누락`);
+    }
+  }
+  // 웹소설은 genre 지정.
+  assert.ok(st.starterMeta("webnovel").every((s) => s.genre), "웹소설 시작 템플릿 genre 누락");
+});
+
+test("㉜ 세계 LOCK·캐논: WORLD LOCK 토큰·블록·주입 + 연속성 검사 폴백", () => {
+  const canon = require("../lib/canon");
+  const ms = require("../lib/media-studios");
+  const an = require("../lib/aianimation");
+  const ag = require("../lib/agents");
+  const wb = canon.localWorldBible({ input: { worldRule: "능력엔 대가가 있다", coreObject: "시계" }, oneSheet: {}, medium: "film" });
+  assert.ok(wb.lockToken && Array.isArray(wb.rules) && wb.rules.length, "world bible 필드 누락");
+  assert.ok(canon.buildWorldLockBlock("TOK").includes("WORLD LOCK") && canon.buildWorldLockBlock("TOK").includes("한 글자도"), "LOCK 블록 누락");
+  assert.equal(canon.buildWorldLockBlock(""), "", "토큰 없으면 빈 블록");
+  // 파서: lockToken 없으면 무효.
+  assert.equal(canon.parseWorldBible('{"rules":["x"]}'), null);
+  assert.ok(canon.parseWorldBible('{"lockToken":"T","rules":["x"]}').lockToken === "T");
+  // 주입: media/conte/agents에 worldLock 있을 때만.
+  assert.ok(ms.buildMediaInputBlock({ medium: "film", format: "medium", ipTitle: "T", worldLock: "TOK" }).includes("WORLD LOCK"), "media 주입 누락");
+  assert.ok(!ms.buildMediaInputBlock({ medium: "film", format: "medium", ipTitle: "T" }).includes("WORLD LOCK"), "media 미주입 실패");
+  assert.ok(an.buildVisualContePrompt({ input: { worldLock: "TOK" }, medium: "animation", oneSheet: {}, format: "short" }).system.includes("WORLD LOCK"), "conte 주입 누락");
+  assert.ok(ag.buildInputBlock({ genre: "romanceFantasy", worldLock: "TOK" }).includes("WORLD LOCK"), "agents 주입 누락");
+  // 연속성 검사 폴백.
+  const cc = canon.localCanonCheck({ input: { coreObject: "시계" }, medium: "film", oneSheet: { centralObject: "시계" }, text: "시계 ".repeat(80) });
+  assert.ok(cc.overall > 0 && Array.isArray(cc.flags) && cc.fallback, "캐논 검사 폴백 불량");
+});
+
+test("㉝ 글로벌 현지화: 언어별 프롬프트 + transcreation 원칙 + 폴백", () => {
+  const loc = require("../lib/localize");
+  assert.ok(Object.keys(loc.LANGS).length >= 4, "언어 4종 미만");
+  const ja = loc.buildLocalizePrompt({ input: { ipTitle: "T" }, medium: "film", target: "ja", text: "형이 말했다" });
+  assert.ok(ja.system.includes("일본어") && /transcreation|문화 적응/.test(ja.system), "ja transcreation 원칙 누락");
+  assert.ok(loc.buildLocalizePrompt({ input: {}, medium: "film", target: "xx" }).system.includes("영어"), "미지원 언어 기본=영어 실패");
+  const fb = loc.localLocalize({ input: { ipTitle: "T" }, medium: "film", target: "en" });
+  assert.ok(fb.includes("영어") && fb.includes("현지화"), "현지화 폴백 불량");
+});
+
 test("㉙ AI 클립 콘티: 5~15초 클립 단위 + 길이 명시 + 피드백 보완(reviseNotes) 루프백", () => {
   const an = require("../lib/aianimation");
   const c = an.buildVisualContePrompt({ input: { ipTitle: "T" }, medium: "animation", oneSheet: {}, format: "short", targetModel: "kling" });

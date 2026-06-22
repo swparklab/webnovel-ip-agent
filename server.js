@@ -53,6 +53,12 @@ const {
   buildToolkitPrompt, localToolkit,
   buildToolkitAnalyzePrompt, parseToolkitAnalyze, localToolkitAnalyze,
 } = require("./lib/media-toolkit");
+const { buildLocalizePrompt, localLocalize } = require("./lib/localize");
+const { starterMeta } = require("./lib/starters");
+const {
+  buildWorldBiblePrompt, parseWorldBible, localWorldBible,
+  buildCanonCheckPrompt, localCanonCheck,
+} = require("./lib/canon");
 const {
   buildGuaranteePrompt, parseGuarantee, localGuarantee,
   buildUpgradeBrief, scoreGuarantee,
@@ -552,6 +558,73 @@ async function handleMediaAudit(req, res) {
   } catch (err) {
     return sendJson(res, 200, { ok: true, audit: localMediaAudit(input, medium, format, digest), note: err?.message });
   }
+}
+
+// 세계 설정 LOCK 생성: 세계 규칙·금기·프롭을 재사용 WORLD LOCK 토큰으로. JSON.
+async function handleWorldBible(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const oneSheet = payload.oneSheet || input.oneSheet || {};
+  const model = payload.model || config.defaultModel;
+  const mode = resolveMode();
+  if (mode === "local") return sendJson(res, 200, { ok: true, bible: localWorldBible({ input, oneSheet, medium }), fallback: true });
+  try {
+    const { system, user } = buildWorldBiblePrompt({ input, oneSheet, medium });
+    const { text } = await streamMessage({ provider: mode, model, system, messages: [{ role: "user", content: user }], temperature: 0.6, maxTokens: 1400 });
+    const b = parseWorldBible(text);
+    return sendJson(res, 200, { ok: true, bible: b || localWorldBible({ input, oneSheet, medium }), fallback: !b, note: b ? undefined : "파싱 실패로 폴백" });
+  } catch (err) { return sendJson(res, 200, { ok: true, bible: localWorldBible({ input, oneSheet, medium }), fallback: true, note: err?.message }); }
+}
+
+// 캐논 연속성 검사: 산출물을 원시트·LOCK과 대조해 설정 모순 진단. JSON.
+async function handleCanonCheck(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const oneSheet = payload.oneSheet || input.oneSheet || {};
+  const worldLock = payload.worldLock || input.worldLock || "";
+  const text = String(payload.text || "");
+  const model = payload.model || config.defaultModel;
+  const mode = resolveMode();
+  const label = "🔍 캐논 연속성 검사";
+  if (mode === "local") return sendJson(res, 200, { ok: true, result: { ...localCanonCheck({ input, medium, oneSheet, text }), label }, fallback: true });
+  try {
+    const { system, user } = buildCanonCheckPrompt({ input, medium, oneSheet, worldLock, text });
+    const { text: out } = await streamMessage({ provider: mode, model, system, messages: [{ role: "user", content: user }], temperature: 0.4, maxTokens: 1600 });
+    const parsed = parseToolkitAnalyze(out);
+    if (parsed) return sendJson(res, 200, { ok: true, result: { ...parsed, label } });
+    return sendJson(res, 200, { ok: true, result: { ...localCanonCheck({ input, medium, oneSheet, text }), label }, fallback: true });
+  } catch (err) { return sendJson(res, 200, { ok: true, result: { ...localCanonCheck({ input, medium, oneSheet, text }), label }, fallback: true, note: err?.message }); }
+}
+
+// 글로벌 현지화: 작품을 타깃 언어로 transcreation(문화 적응) → Markdown(SSE).
+async function handleLocalize(req, res) {
+  const payload = await readJson(req, 8_000_000);
+  const input = payload.input || {};
+  const medium = payload.medium || input.medium || "film";
+  const target = payload.target || "en";
+  const text = String(payload.text || "");
+  const model = payload.model || config.defaultModel;
+  const provider = resolveMode();
+  const { emit, signal } = streamingReply(res, req);
+  if (provider === "local") {
+    const s = localLocalize({ input, medium, target, text }); emit("delta", { text: s }); emit("done", { ok: true, fallback: true, result: s }); res.end(); return;
+  }
+  try {
+    const { system, user } = buildLocalizePrompt({ input, medium, target, text });
+    let acc = "";
+    const { text: out } = await streamMessage({
+      provider, model, system, signal,
+      messages: [{ role: "user", content: user }],
+      temperature: 0.6, maxTokens: 3000,
+      onText: (chunk) => { acc += chunk; emit("delta", { text: chunk }); },
+    });
+    const full = (out || acc).trim() || localLocalize({ input, medium, target, text });
+    emit("done", { ok: true, result: full });
+  } catch (err) {
+    if (err?.name !== "AbortError") { const s = localLocalize({ input, medium, target, text }); emit("done", { ok: true, fallback: true, result: s, note: err?.message }); }
+  } finally { res.end(); }
 }
 
 // 매체별 전문 도구팩: 생성기/레퍼런스/플래너 → Markdown(SSE).
@@ -1151,6 +1224,12 @@ async function handleApi(req, res, pathname) {
     });
   }
 
+  if (req.method === "GET" && pathname === "/api/starters") {
+    const query = new URL(req.url, "http://localhost").searchParams;
+    const medium = query.get("medium") || "webnovel";
+    return sendJson(res, 200, { ok: true, medium, starters: starterMeta(medium) });
+  }
+
   if (req.method === "GET" && pathname === "/api/toolkit-meta") {
     const query = new URL(req.url, "http://localhost").searchParams;
     const medium = query.get("medium") || "film";
@@ -1220,6 +1299,18 @@ async function handleApi(req, res, pathname) {
 
   if (req.method === "POST" && pathname === "/api/charsheet") {
     return handleCharSheet(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/localize") {
+    return handleLocalize(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/worldbible") {
+    return handleWorldBible(req, res);
+  }
+
+  if (req.method === "POST" && pathname === "/api/canoncheck") {
+    return handleCanonCheck(req, res);
   }
 
   if (req.method === "POST" && pathname === "/api/toolkit") {

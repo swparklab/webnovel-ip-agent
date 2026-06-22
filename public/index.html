@@ -84,6 +84,10 @@
               </button>
             </div>
             <p class="section-hint">아는 만큼만 <strong>Core IP</strong>를 적고 <strong>🧩 빈 칸만 AI로 채우기</strong>를 누르면, 채운 항목은 그대로 두고 나머지를 AI가 모순 없이 보강합니다. 백지에서 시작하려면 아이디어 한 줄로 <strong>기획 채우기</strong>를 쓰세요.</p>
+            <div class="starter-block">
+              <button class="command" id="starterToggle" type="button" title="현재 매체에 맞는 '바로 제작 가능한' IP 시드를 원클릭으로 채웁니다">✨ 빠른 시작 템플릿 (백지에서 한 번에)</button>
+              <div id="starterPanel" class="starter-panel" hidden></div>
+            </div>
           </div>
 
           <div class="form-section steering-section prod-only">
@@ -455,6 +459,18 @@
           </select>
           <button class="command" data-media-act="convert" type="button">🎬 변환 실행</button>
         </div>
+        <div class="tool-tabs" id="mediaCanon" style="margin-top:8px" aria-label="일관성·확장">
+          <span class="section-hint" style="margin:0 6px 0 0">🌍 일관성·확장:</span>
+          <button class="command" data-media-act="worldlock" type="button" title="세계 설정 바이블 생성 + 모든 산출에 반복할 WORLD LOCK 토큰(세계 규칙·금기·프롭·시각 코드 고정)">🌍 세계 LOCK</button>
+          <button class="command" data-media-act="canoncheck" type="button" title="현재 산출물을 원시트·세계/캐릭터 LOCK과 대조해 설정 모순·연속성 오류를 진단">🔍 연속성 검사</button>
+          <select id="localizeTarget" aria-label="현지화 언어">
+            <option value="en">영어</option>
+            <option value="ja">일본어</option>
+            <option value="zh">중국어(간체)</option>
+            <option value="es">스페인어</option>
+          </select>
+          <button class="command" data-media-act="localize" type="button" title="현재 작품/산출물을 타깃 언어로 transcreation(번역+문화 적응) — 제목·호칭·관용구 현지화 + 오역 위험 메모">🌐 현지화</button>
+        </div>
         <div class="tool-tabs" id="mediaAiFilm" style="margin-top:8px" aria-label="AI 영상 제작">
           <span class="section-hint" style="margin:0 6px 0 0">🎥 AI 영상:</span>
           <button class="command" data-media-act="artstyle" type="button" title="작품에 알맞은 그림풍 A/B/C 추천 + 스타일별 생성 프롬프트(키비주얼·캐릭터·핵심 장면)">🎨 그림풍 추천</button>
@@ -472,6 +488,7 @@
         </div>
         <div class="tool-tabs" id="mediaToolpack" style="margin-top:8px" aria-label="제작 도구팩"></div>
         <div class="tool-result md-output" id="mediaResult" hidden></div>
+        <div class="media-workspace" id="mediaWorkspace" hidden></div>
       </div>
     </div>
 
